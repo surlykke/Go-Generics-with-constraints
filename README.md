@@ -7,9 +7,16 @@ If that happens this project will be deleted_
 
 This is a proposal for generics in the Go language using concepts. It is written by Christian Surlykke, fall of 2017.
 
-There have been lots of discussion on how generics in Go could look. In particular Ian Lance Taylor have 
-written detailed proposals [15292 Generics]() [Type Functions]() [Generalized Types ]() 
-[Generalized Types in Go)[] and [Type Parameters]() outlining how to do generics in Go.
+There have been lots of discussion on how generics in Go could look. 
+In particular Ian Lance Taylor have written detailed proposals  
+[15292 Generics](https://github.com/golang/proposal/blob/master/design/15292-generics.md), 
+[Type Functions](https://github.com/golang/proposal/blob/master/design/15292/2010-06-type-functions.md), 
+[Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
+[Generalized Types in Go](https://github.com/golang/proposal/blob/master/design/15292/2013-10-gen.md) and 
+[Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
+outlining various ways of doing generics in Go. 
+
+Most of the discussion has taken place in issue [15292](https://github.com/golang/go/issues/15292).
 
 In the first couple of  proposals Taylor works with the idea that a type parameter in a generic declaration could be _constrained_ by requiring it to implement an _interface_.
 
@@ -18,9 +25,8 @@ In the latest proposal Taylor seems to abandon this approach in favor of having 
 What I want to do with this proposal is develop the first idea fully: Introduce a new language construct, `concept` with wich
 it can be constrained what kind of operations may be performed on a type parameter in a generic definition.
 
-The aim is that the correctness of a generic definition can be verified at the point of definition. 
-When instatiating a generic type or function, the compiler just needs to verify that the concrete type satisfies the constraints. 
-It should not have to expand the code and verify it's correctness at that point.
+The aim is that the correctness of a generic definition can be verified at the point of _definition_. 
+When instatiating a generic type or function, the compiler should just need to verify that the concrete type satisfies the constraints given, and it should not be nessecary to expand the code and verify it's correctness at that point.
 
 With that I believe it will be possible to write generic code that is more readable.
 I believe it will simplify the compiler and I believe it will allow better tooling.
@@ -35,7 +41,7 @@ A type parameter in a generic definition may be declared to _implement_ a concep
 This means that any concrete type _instantiating_ the parameter must have the methods, fields, operators and built-in functions that the
 concept defines. 
 
-In a generic definition the _only allowed operations_ on a type parameter are those defined by a concept that the parameter implements.
+In a generic definition the _only_ allowed operations on a type parameter are those defined by a concept that the parameter implements.
 
 
 Example: Let us say we have a concept `Loggable` defining a method `Log()`. A generic function can be defined:
@@ -107,7 +113,8 @@ Concepts can be generic:
 }
 ```
   
-Implement: 
+So with: 
+
 ```
 type Person struct {
 	Name string
@@ -119,7 +126,7 @@ type Person struct {
 	
 ```
 
-And use:
+one can do:
 
 ```Go
 \C Cloneable\C/ / func copy(c C) {
@@ -147,21 +154,25 @@ A generic function:
 }
 ```
 
-Use it:
+An implementation:
 
 ```Go
 type Employee struct {
 	Id uint64
 	Name string
 }
+```
 
+wich can be used:
+
+```
 var employee = Employee{1, "Chr. Surlykke"}
 
-show\Employee/(employee)
+ShowId\Employee/(employee)
 ```
 
 
-### Operators and functions
+### Operators and built-in functions
 
 There will be no syntax to define operators on concepts. 
 Instead we will define a set of _built in_ concepts that have operators and standard functions associated with them.
@@ -188,18 +199,36 @@ The full list of built-in concepts are:
 |---------------:| :---------------------------------|:------------------------|:-------------------------------:|
 |Comparable      | Any comparable type               |==,!=                    |                                 |
 |Ordered         | integers, floats or string        |==, !=, <,>,<=,>=        |                                 |
-|Additive        | numbers or string                 |+                        |                                 |
+|Additive        | numbers or string                 |+, +=                    |                                 |
 |Number          | numbers                           |+,-,\*,/                 |                                 |
 |Integer         | integers                          |+,-,\*,/<<,>>,^,&,&#124; |                                 |
-|Array\T/        | array or slice of T               |[ ]                      | make, len, cap                  |
-|Slice\T/        | slice of T                        |[ ]                      | make, append, len, cap, copy    | 
-|Map\K Ordered,V/| map[K]V                           |[ ]                      | make, len, delete               |
+|Bool			 | bool                              |==,!=,&&,||,!            |                                 |
+|String          | string                            |[],+,==,!=,<,>,<=,>=     |                                 |
+|Array\T/        | array or slice of T               |[]                       | make, len, cap                  |
+|Slice\T/        | slice of T                        |[]                       | make, append, len, cap, copy    | 
+|Map\K Ordered,V/| map[K]V                           |[]                       | make, len, delete               |
 |RChan\T/        | <-chan T                          |<- (read)                | make, close, cap                |
 |WChan\T/        | chan<- T                          |<- (write)               | make, close, cap                |
 |Chan\T/         | chan T                            |<- (read and write)      | make, close, cap                |
 
 
 A concept that is implemented by a type T is also implemented by any type that has T as underlying type.
+
+I've included `Bool` in the table.
+That may seem a strange choice: 
+How would you write a generic type or function with a Bool parameter? Well, Go allows this:
+
+```
+type MyBool bool
+```
+
+which creates a type distinct from bool but succeptible to the same operations. 
+This allows generic definitions handling all such types.
+I must, however, admit I'm not able to come up with a convincing use for such types, so let's say I've added `Bool` for completeness.
+
+I've also included `String` in the table. You can derive types from string in the same way as for bool, but here the usefulness 
+is more obvious.
+
 
 As the table shows, some of the built-in concepts have _functions_ associated with them. 
 For example `Array` defines the functions `make`, `len` and `cap`, so a for type `S` implementing `Array\T/` the expression
@@ -244,11 +273,10 @@ type Stringer interface {
 PrintableVector []T
 ```
 
+## Further considerations
 
-
-## Variations
-
-Whats written above constitutes my proposal for concepts in Go. Here I'll mention some variations that could be considered.
+Whats written above constitutes my proposal for concepts in Go. 
+Here I'll mention some variations and additions that could be considered.
 
 ### Extending interfaces rather than introducing concepts
 
