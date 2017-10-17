@@ -273,6 +273,31 @@ type Stringer interface {
 PrintableVector []T
 ```
 
+## Runtime
+
+Concrete instantions of generic types and functions should look like ordinary hand coded ones. Given:
+
+
+```Go
+\Foo C/ MyType ...
+
+type Baa ... // Implements C
+```
+
+you can cast:
+
+```Go
+.(MyType\Baa/)
+```
+
+The instantiation `MyType\Baa/` is a concrete type just like any other (non-generic) type in Go. 
+In fact, from a runtime perspective, the only thing that gives away it's origin in a generic definition is
+the appearence of `\` and `/` in it's name.
+
+Concepts have no presence at runtime. 
+It is not possible to cast to concepts, declare variables to instantiate concepts or to use reflection to query about concepts.
+
+
 ## Further considerations
 
 Whats written above constitutes my proposal for concepts in Go. 
