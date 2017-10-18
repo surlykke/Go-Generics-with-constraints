@@ -195,49 +195,101 @@ As an example:
 
 The full list of built-in concepts are:
 
-|**Concept**     |Implemented by                     | Operators               | Built in functions              | 
-|---------------:| :---------------------------------|:------------------------|:-------------------------------:|
-|Comparable      | Any comparable type               |==,!=                    |                                 |
-|Ordered         | integers, floats or string        |==, !=, <,>,<=,>=        |                                 |
-|Additive        | numbers or string                 |+, +=                    |                                 |
-|Number          | numbers                           |+,-,\*,/                 |                                 |
-|Integer         | integers                          |+,-,\*,/<<,>>,^,&,&#124; |                                 |
-|Bool			 | bool                              |==,!=,&&,||,!            |                                 |
-|String          | string                            |[],+,==,!=,<,>,<=,>=     |                                 |
-|Array\T/        | array or slice of T               |[]                       | make, len, cap                  |
-|Slice\T/        | slice of T                        |[]                       | make, append, len, cap, copy    | 
-|Map\K Ordered,V/| map[K]V                           |[]                       | make, len, delete               |
-|RChan\T/        | <-chan T                          |<- (read)                | make, close, cap                |
-|WChan\T/        | chan<- T                          |<- (write)               | make, close, cap                |
-|Chan\T/         | chan T                            |<- (read and write)      | make, close, cap                |
+* `Comparable`
+  * Operators: `==`, `!=`
+  * Built in functions: _none_
+  * Implemented by: _Any comparable type_
+* `Ordered`
+  * Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+  * Built in functions: _none_
+  * Implemented by: _integer types_, _float types_ and `string`
+* `Addable`
+  * Operators: `+`
+  * Built in functions: _none_
+  * Implemented by: `string`, _number types_
+* `Number`
+  * Operators: `+`, `-`, `*`, `/`
+  * Built in functions: _none_
+  * Implemented by: _number types_
+* `Integer`
+  * Operators: `+`, `-`, `*`, `/`, `<<`, `>>`, `^`, `&`, `|`; 
+  * Built in functions: _none_
+  * Implemented by: _integer types_
+* `Bool` 
+  * Operators: `==`, `!=`, `&&`, `||`, `!`
+  * Built in functions:
+  * Implemented by: _boolean types_
+  * Note: `Bool` is special in that type parameters implementing `Bool` may be used in conditionals. Eg:
+    ```Go
+	\B Bool/ func F(b B) {
+		if b {
+			println "It's true"
+		} else {
+			println "It's false"
+		}
+	}
+	```
+* `String` 
+  * Operators: `[]`, `+`, `==`, `!=`, `<`, `>`, `<=`, `>=`
+  * Built in functions: `make`, `len`, `cap`
+  * Implemented by: _string types_
+* `Array\T/` 
+  * Operators: `[]`
+  * Built in functions: `len`, `cap`
+  * Implemented by: _array types containing `T`_
+* `Slice\T/`
+  * Operators: `[]`
+  * Built in functions: `make`, `append`, `len`, `cap`, `copy`
+  * Implemented by: _slice types containing `T`_
+* `Map\K Comparable, V/` 
+  * Operators: `[]`
+  * Built in functions: `make`, `len`, `delete`
+  * Implemented by: _map types keyed by `K`, holding `T`_
+* `RChan\T/`
+  * Operators: `<-` _(read)_
+  * Built in functions: `make`, `close`, `cap`
+  * Implemented by: _read channels of `T`_
+* `WChan\T/`
+  * Operators: `<-` _(write)_
+  * Built in functions: `make`, `close`, `cap`
+  * Implemented by: _write channels of `T`_
+* `Chan\T/`
+  * Operators: `<-` _(read and write)_
+  * Built in functions: `make`, `close`, `cap`
+  * Implemented by: _channels of `T`_
+
+A few clarifications:
+
+* A concept that is implemented by a type T is also implemented by any type that has T as underlying type.  
+  Eg: `type AppleCount int` implements `Integer`, `Number`, `Additive`
+* `Bool` is included in the table.  That may seem a strange choice: 
+  How would you write a generic type or function with a Bool parameter? Well, Go allows this:
+
+  ```
+  type MyBool bool
+  ```
+
+  which creates a type distinct from bool but succeptible to the same operations. 
+  This allows generic definitions handling all such types.
+  I must, however, admit I'm not able to come up with a convincing use for such types, 
+  so let's say I've added `Bool` for completeness.
+
+* I've also included `String` in the table. 
+  You can derive types from string in the same way as for bool, but the usefulness of types with `string` as 
+  underlying type is more obvious.
 
 
-A concept that is implemented by a type T is also implemented by any type that has T as underlying type.
+* Some of the built-in concepts have _built-in functions_ associated with them. 
+  For example `Slice` defines the functions `make`, `len` and `cap`, so you can do stuff like:
 
-I've included `Bool` in the table.
-That may seem a strange choice: 
-How would you write a generic type or function with a Bool parameter? Well, Go allows this:
+  ```Go
+  \T, S Slice\T/ / func F {
+      var s S = make(S, 0, 0)
+	  ...
+  }
+  ```
 
-```
-type MyBool bool
-```
-
-which creates a type distinct from bool but succeptible to the same operations. 
-This allows generic definitions handling all such types.
-I must, however, admit I'm not able to come up with a convincing use for such types, so let's say I've added `Bool` for completeness.
-
-I've also included `String` in the table. You can derive types from string in the same way as for bool, but here the usefulness 
-is more obvious.
-
-
-As the table shows, some of the built-in concepts have _functions_ associated with them. 
-For example `Array` defines the functions `make`, `len` and `cap`, so a for type `S` implementing `Array\T/` the expression
-
-```Go
-make(S, initialSize, initialCapacity)
-```
-
-is valid and returns an instance of `S`.
+  This constitutes a way of hooking up generics and Concepts with the generics that is built into Go today.
 
 ## Embedding 
 
