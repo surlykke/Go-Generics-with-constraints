@@ -273,6 +273,30 @@ type Stringer interface {
 PrintableVector []T
 ```
 
+## Overloading generic definitions
+
+Overloading of generic definitions with the _same_ number of type parameters is _not_ allowed: 
+
+```Go
+\T Concept1/ type Foo ... 
+                          
+\T Concept2/ type Foo ... // Not allowed
+```
+
+The problem would be that if `Baa` implements both `Concept1` and `Concept2`, then `Foo\Baa/` would be ambigous with
+respect to which definition to employ.
+
+Overloading with _different_ number of generic parameters _is_ allowed.
+So:
+
+```Go
+\S Concept1/ type Foo ...
+\T Concept2, U Concept3/ type Foo ...
+```
+
+is ok.
+
+
 ## Runtime
 
 Concrete instantions of generic types and functions should look like ordinary hand coded ones. Given:
