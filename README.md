@@ -416,5 +416,80 @@ I have not taken that route for 2 reasons:
 	on compile- and runtime performance for existing interface usage. We should strive for 'no play, no pay' when
 	introducing generics in Go.
 
-TODO: Specialization, Variadic templates.
+### Specialization 
+
+In C++ template programming you may employ specialization and SFINAE to customize a generic definition for certain types. 
+
+Template specialization relies on overloading, and would not, in my opinion, be a good fit for Go. 
+
+SFINAE basically means that you can create several definitions of a generic type/function and the compiler will decide at 
+point of instantiation which one 'works'. This is obviously at odds with the goals of this proposal.
+
+On the other hand some kind of conditional behaviour for generic definitions could be beneficial. Consider the `Max` function:
+
+```Go
+\T Ordered/ func Max(t1,t2 T) T {
+	if t1 < t2 {
+		return t2
+	} else {
+		return t1
+	}
+}
+```
+
+It would be nice to extend this function to types that are not `Ordered`, but have a method `LessThan`:
+
+```Go
+\T/ type Lessable concept {
+	LessThan(other T) bool
+}
+
+\T Lessable\T/ / func Max(t1, t2 T) T {
+	if t1.LessThan(t2) {
+		return t2
+	} else {
+		return t1
+	}
+}
+```
+
+We can't have these two definitions at the same time as overloading is not allowed. One could consider some form of `static if`:
+
+```Go
+\T/ func Max(t1, t2 T) T {
+	var t1_less_than_t2 bool
+	
+	static if \T Ordered/ {
+		t1_less_than_t2 = t1 < t2
+	} else if \T Lessable/ {
+		t1_less_than_t2 = t1.LessThan(t2)
+	} else {
+		compiler_error("Type must implement Ordered or Lessable")
+	}
+
+	if t1_less_than_t2 {
+		return t2
+	} else {
+		return t1
+	}
+}
+```
+
+The idea would be that the compiler should verify the correctness of this code at the point of definition, 
+and on instantiation apply the first branch of the static if for types implementing `Ordered`, 
+the second branch for types implementing `Lessable` and the third (issuing a compiler error) for all others.
+
+There are problems with this:
+
+- We introduce new syntax here, and I'm not convinced that it's usefulness is broad enough to warrant that. 
+- It will complicate compiling. In particular, the compiler would have to be able to handle nested 'static if's 
+  to an arbitrary depth, and carry these branches around.
+- The syntax may not be the right one. An alternative could some form of type switch.
+
+As I'm no sure what form of specialization is the best or how beneficial it really is, 
+this proposal does _not_ include a specialization mechanism. 
+
+I feel the subject is complicated enough that it should be considered separately.
+
+TODO: Variadic templates.
 
