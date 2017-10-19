@@ -8,7 +8,7 @@ If that happens this project will be deleted_
 This is a proposal for generics in the Go language using concepts. It is written by Christian Surlykke, fall of 2017.
 
 There have been lots of discussion on how generics in Go could look. 
-In particular Ian Lance Taylor have written detailed proposals  
+In particular Ian Lance Taylor have written detailed proposals
 [15292 Generics](https://github.com/golang/proposal/blob/master/design/15292-generics.md), 
 [Type Functions](https://github.com/golang/proposal/blob/master/design/15292/2010-06-type-functions.md), 
 [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
@@ -348,6 +348,29 @@ So:
 
 is ok.
 
+## Type methods
+
+Generic types can have methods:
+
+\T C1/ type Foo ...
+
+\T C1/ func (f Foo\T/) M() {
+
+}
+
+The target type must have the same number of type parameters as in the definition of the type.
+And each of the type parameters must be declared to implement the same concept (if any) as in the definition of the type.
+
+Hence this is not allowed:
+
+```Go
+\T Concept1/ type Foo ...
+
+\T Concept2/ func (f Foo\T/) M() {
+}
+```
+
+Not even if Concept2 is equivalent to Concept1 or embeds Concept1. 
 
 ## Runtime
 
