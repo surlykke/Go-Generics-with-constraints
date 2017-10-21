@@ -453,18 +453,18 @@ It would be nice to extend this function to types that are not `Ordered`, but ha
 }
 ```
 
-We can't have these two definitions at the same time as overloading is not allowed. One could consider some form of `static if`:
+We can't have these two definitions at the same time as overloading is not allowed. 
+One could consider some form of static type switch:
 
 ```Go
 \T/ func Max(t1, t2 T) T {
 	var t1_less_than_t2 bool
 	
-	static if \T Ordered/ {
+	switch\T/ {
+	case Ordered:
 		t1_less_than_t2 = t1 < t2
-	} else if \T Lessable/ {
+	case Lessable: 
 		t1_less_than_t2 = t1.LessThan(t2)
-	} else {
-		compiler_error("Type must implement Ordered or Lessable")
 	}
 
 	if t1_less_than_t2 {
@@ -475,19 +475,16 @@ We can't have these two definitions at the same time as overloading is not allow
 }
 ```
 
-The idea would be that the compiler should verify the correctness of this code at the point of definition, 
-and on instantiation apply the first branch of the static if for types implementing `Ordered`, 
-the second branch for types implementing `Lessable` and the third (issuing a compiler error) for all others.
+The idea could be:
 
-There are problems with this:
-
-- We introduce new syntax here, and I'm not convinced that it's usefulness is broad enough to warrant that. 
-- It will complicate compiling. In particular, the compiler would have to be able to handle nested 'static if's 
-  to an arbitrary depth, and carry these branches around.
-- The syntax may not be the right one. An alternative could some form of type switch.
-
-As I'm no sure what form of specialization is the best or how beneficial it really is, 
-this proposal does _not_ include a specialization mechanism. 
+*   The compiler (still) verifies the correctness of this code at the point of definition.
+*   On instantiation apply the first switch case that matches (ie. `T` implements the concept).
+*   If no case matches, the compiler issues a compile error, something like "Type must implement one of `Ordered`, `Lessable`."
+*   A `default` entry is allowed, so that all types can be handled in one switch.    
+    
+I have not included type switch in this proposal.
+While this construct works nicely for the `Max` example, 
+I'm not convinced that it's usefulness is broad enough to warrant its addition to Go. 
 
 I feel the subject is complicated enough that it should be considered separately.
 
