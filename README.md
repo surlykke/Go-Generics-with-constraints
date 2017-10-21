@@ -490,3 +490,31 @@ I feel the subject is complicated enough that it should be considered separately
 
 TODO: Variadic templates.
 
+### Variadic definitions
+
+Another element left out of this proposal is _variadic definitions_. Something like:
+
+```Go
+\T...Concept/ type ?? 
+```
+
+I've put a couple of question marks here, because it is unclear, to me at least, how to write an actual definition
+based on a variable number of type parameters. C++ uses recursion which in turn relies on overload, and that is not a good 
+fit for Go. I think you'd have to add a number of primitives to Go including:
+
+*	A way of getting the number of type parameters at intantiation time
+*   A way of addressing the n'th type parameter 
+*  	A way of packing a list of variables into a struct and a way of 'spreading' a struct to a list of variables
+
+Overloading with respect to number of type parametes _is_ allowed so it is possible to do:
+
+```Go
+\T1/ type tuple struct { t1 T1 }
+\T1, T2/ type tuple struct { t1 T1, t2 T2 }
+\T1, T2, T3/ type tuple struct { t1 T1, t2 T2, t3 T3 }
+```
+
+etc. 
+So if you want to do tuples, you can define them and accompanying functions/methods up to, say, 20 elements covering most usecases. 
+It will involve some writing, but once done, from a usage perspective about just as useful as if it had been defined with
+variadic generics. Go gen may be helpful. All in all I do not think omission of variadic definitions is a major problem.
