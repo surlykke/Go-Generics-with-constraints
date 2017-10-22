@@ -518,3 +518,28 @@ etc.
 So if you want to do tuples, you can define them and accompanying functions/methods up to, say, 20 elements covering most usecases. 
 It will involve some writing, but once done, from a usage perspective about just as useful as if it had been defined with
 variadic generics. Go gen may be helpful. All in all I do not think omission of variadic definitions is a major problem.
+
+### Combining concepts 'on the fly'
+
+One element of Java generics I like is:
+
+```Java 
+public class C<T extends I1 & I2> {
+	...
+}
+```
+
+Here you combine interfaces 'on the fly', not having to define a new one extending `I1` and `I2`. 
+
+It could be considered to add something like this to Go concepts, maybe:
+
+```Go
+\T C1:C2/ type ...
+```
+
+meaning T should implement both `C1` and `C2`. 
+
+I have opted not to do so, since I feel that the behaviour of concepts and interfaces should be as closely aligned as possible.
+In other words: If this should be added to concepts it should also be added to interfaces. That would be a separate proposal.
+
+
