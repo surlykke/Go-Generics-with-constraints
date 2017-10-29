@@ -100,7 +100,7 @@ This proposal is really about concepts.
 A concept with methods looks very much like an interface:
 
 ```Go
-type Loggable concept {
+concept Loggable {
 	Log() 
 }
 ```
@@ -108,7 +108,7 @@ type Loggable concept {
 Concepts can be generic:
 
 ```Go
-\T/ type Cloneable concept {
+\T/ concept Cloneable {
 	Clone() T
 }
 ```
@@ -296,11 +296,11 @@ A few clarifications:
 Just like interfaces, a concept can _embed_ an other 
 
 ```Go
-type Foo concept {
+concept Foo {
 	...
 }
 
-type Baa concept {
+concept Baat {
 	Foo
 	...
 }
@@ -440,7 +440,7 @@ On the other hand some kind of conditional behaviour for generic definitions cou
 It would be nice to extend this function to types that are not `Ordered`, but have a method `LessThan`:
 
 ```Go
-\T/ type Lessable concept {
+\T/ concept Lessable {
 	LessThan(other T) bool
 }
 
