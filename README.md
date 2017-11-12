@@ -12,45 +12,51 @@ In particular Ian Lance Taylor have written detailed proposals
 [15292 Generics](https://github.com/golang/proposal/blob/master/design/15292-generics.md), 
 [Type Functions](https://github.com/golang/proposal/blob/master/design/15292/2010-06-type-functions.md), 
 [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
-[Generalized Types in Go](https://github.com/golang/proposal/blob/master/design/15292/2013-10-gen.md) and 
+[Generalized Types in Go](https://github.com/golang/proposal/blob/master/design/15292/2013-10-gen.md) and last
 [Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
-outlining various ways of doing generics in Go. 
+outlining how to add generics to Go. 
 
 Most of the discussion has taken place in issue [15292](https://github.com/golang/go/issues/15292).
 
-In the first couple of  proposals Taylor works with the idea that a type parameter in a generic declaration could be _constrained_ by requiring it to implement an _interface_.
+In [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
+Taylor works with the idea that concrete instantions of type parameter could be require to implement an _interface_. 
+It would look like
 
-In the latest proposal Taylor seems to abandon this approach in favor of having the compiler _extract_ constraints from a generic definition.
+```Go
+gen [T Stringer] type PrintableVector []T
+```
 
-What I want to do with this proposal is develop the first idea fully: Introduce a new language construct, `concept` with wich
-it can be constrained what kind of operations may be performed on a type parameter in a generic definition.
+and would mean that `PrintableVector` could only be instantiated with types `T` that implement the `Stringer` interface. 
 
-The aim is that the correctness of a generic definition can be verified at the point of _definition_. 
-When instatiating a generic type or function, the compiler should just need to verify that the concrete type satisfies the constraints given, and it should not be nessecary to expand the code and verify it's correctness at that point.
+In later proposals Taylor abandons this approach in favor of having the compiler _extract_ constraints from a generic definition.
 
-With that I believe it will be possible to write generic code that is more readable.
-I believe it will simplify the compiler and I believe it will allow better tooling.
+What I want to do here is develop the interface idea fully: Introduce a new language construct, `concept`. 
+A concept is much like an interface but in addition to _methods_ it may also have _fields_, _operators_ and _built-in methods_
+associated with it.
 
-## Concepts
+Concrete types instantiating a type parameter of a generic definition may be required to implement a concept - 
+i.e. required to have/support the methods, fields, operators and built-in functions of that concept.
 
-I propose to add to Go a new construct: `concept`. 
+Then, and only then, may those methods, fields, operators and built-in functions be used in the generic definition.
 
-A concept defines a set of _methods_, _fields_, _operators_ and built-in _fuctions_. 
+The aim is that the correctness of a generic definition can be verified at the point of _definition_:  
+When instantiating a generic type, the compiler only needs to verify that the concrete type parameters implement the concepts as required, 
+and then the validity of the instantiation follows.
 
-A type parameter in a generic definition may be declared to _implement_ a concept. 
-This means that any concrete type _instantiating_ the parameter must have the methods, fields, operators and built-in functions that the
-concept defines. 
+I believe that with this, the compiler can be made simpler, the code will be more readable and that it will allow for better tooling.
 
-In a generic definition the _only_ allowed operations on a type parameter are those defined by a concept that the parameter implements.
+## An example
 
-
-Example: Let us say we have a concept `Loggable` defining a method `Log()`. A generic function can be defined:
+We shall see below how to define concepts. For now, let us say we have a concept `Loggable` defining a method `Log()`. 
+Then a  generic function can be declared as this:
 
 ```Go
 \L Loggable/ func DoLog(l L) {
 	l.Log()
 }
 ```
+
+Here the expression `l.Log()` is allowed because `L` is required to implement `Loggable` which has the method `Log()`.
 
 A concrete type may implement `Loggable`:
 
@@ -71,33 +77,68 @@ var f Foo
 DoLog\Foo/(f)
 ```
 
+### The syntax
 
-### About the syntax
+The general form of generic declarations will be:
 
-As you can see, I use `\` and `/` as delimiters. I prefer not to overload  `[]` or `()` with a new usage, and I prefer
+```EBNF
+GenericDeclaration = '\' TypeParamList '/' ( TypeDef() | FunctionDecl | MethodDecl | ConceptDecl ) .
+TypeParamList = identifier [ ConceptName ] {, identifier [ ConceptName ] } .
+```
+
+[TypeDef](), [FunctionDecl]() and [MethodDecl]() are defined as in [The Go Programming Language Specification](), except 
+that generic functions and methods may not be bodiless. `ConceptDecl` is defined below. 
+
+The definition [TypeName]() and [OperandName]() from the language spec are changed:
+
+```EBNF
+TypeName = ( identifier | QualifiedIdent ) [ '\' ConcreteTypeList '/' ] .
+OperandName = ( identifier | QualifiedIdent | NameOfFunction ) .
+NameOfFunction = ( identifier | QualifiedIdent ) [ '\' ConcreteTypeList '/' ] .
+ConcreteTypeList = '\' TypeName {, TypeName } '/'
+```
+
+And finally, ConceptName is defined as:
+```EBNF
+ConceptName = ( identifier | QualifiedIdent ) [ '\' ConcreteTypeList '/' ]
+```
+
+[identifier]() and [QualifiedIdent]() are defined as in the [Go language spec].
+
+#### Delimiters
+
+`\` and `/` are used as delimiters. I prefer not to overload  `[]` or `()` with a new usage, and I prefer
 `MyFunc\Foo/(f)` to `MyFunc(Foo)(f)`.
 
 To my knowledge, there is no other legal use of backslash in Go outside strings and runes. 
-Hence there is no need for a keyword, like 'gen', to mark the start of a generic declaration. `\` will serve that purpose.
+Hence there is no need for a keyword, like `template` or `gen`, to mark the start of a generic declaration, 
+`\` will serve that purpose.
 
 The main drawback is that if you nest: `Foo\Baa\T//` the last pair of forward slashes will be interpreted as line comment. 
 You'll have to insert a space: `Foo\Baa\T/ /`, or perhaps slightly nicer: `Foo\ Baa\T/ /`.
 
-This is reminiscent of the `>>` issue in C++ template programming. In my mind it's not a huge problem. 
-If your editor does syntax coloring, it should be easy to spot, and I assume a check for this could easily be added to golint.
+This is reminiscent of the `>>` issue in C++ template programming (so you could view it as a (weird) homage to C++). 
+In my mind it's not a huge problem. 
 
-I would like to point out, though, that the choice of delimiters is in no way essential to this proposal. 
-It could easily be rewritten to use another pair of delimiters and/or to use a keyword like `gen`. 
+I would like to point out, though, that the choice of delimiters not way essential to this proposal. 
+It could easily be rewritten to use another pair of delimiters at the cost of a sligth increase to compiler complexity.
 
 This proposal is really about concepts.
 
 
-## Defining concepts
+## Declaring concepts
+
+The form of a concept declaration is:
+
+```EBNF
+ConceptDecl = 'concept' '{' { ConceptMemberSpec } '}' .
+ConceptMemberSpec = ConceptMethodSpec | ConceptFieldSpec | ConceptName .
+ConceptMethodSpec = identifier Signature .
+ConceptFieldSpec = identifier TypeName .
+```
 
 
-### Methods
-
-A concept with methods looks very much like an interface:
+Here's an example of a concept with a method:
 
 ```Go
 concept Loggable {
@@ -134,9 +175,7 @@ one can do:
 }
 ```
 
-As is seen here, CRTP is allowed.
-
-### Fields
+### Concepts with fields
 
 Fields on concepts are defined like this:
 
@@ -174,7 +213,7 @@ ShowId\Employee/(employee)
 
 ### Operators and built-in functions
 
-There will be no syntax to define operators on concepts. 
+There will be no syntax to explicitly define operators on concepts. 
 Instead we will define a set of _built in_ concepts that have operators and standard functions associated with them.
 
 One example of a built in concept is `Ordered`. 
