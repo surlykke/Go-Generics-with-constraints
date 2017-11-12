@@ -79,17 +79,23 @@ DoLog\Foo/(f)
 
 ### The syntax
 
-The general form of generic declarations will be:
+Generic declarations are allowed at the top level, and their form is:
 
 ```EBNF
-GenericDeclaration = '\' TypeParamList '/' ( TypeDef() | FunctionDecl | MethodDecl | ConceptDecl ) .
+GenericDeclaration = '\' TypeParamList '/' ( TypeDef | FunctionDecl | MethodDecl | ConceptDecl ) .
 TypeParamList = identifier [ ConceptName ] {, identifier [ ConceptName ] } .
 ```
 
-[TypeDef](), [FunctionDecl]() and [MethodDecl]() are defined as in [The Go Programming Language Specification](), except 
+[TypeDef](https://golang.org/ref/spec#TypeDef), 
+[FunctionDecl](https://golang.org/ref/spec#FunctionDecl) and 
+[MethodDecl](https://golang.org/ref/spec#MethodDecl) are defined as in 
+[The Go Programming Language Specification](https://golang.org/ref/spec), except 
 that generic functions and methods may not be bodiless. `ConceptDecl` is defined below. 
 
-The definition [TypeName]() and [OperandName]() from the language spec are changed:
+The definition 
+[TypeName](https://golang.org/ref/spec#TypeName) and 
+[OperandName](https://golang.org/ref/spec#OperandName) 
+from the language spec are changed:
 
 ```EBNF
 TypeName = ( identifier | QualifiedIdent ) [ '\' ConcreteTypeList '/' ] .
@@ -128,7 +134,7 @@ This proposal is really about concepts.
 
 ## Declaring concepts
 
-The form of a concept declaration is:
+A concept declaration allows explicit definition of methods, fields and/or other concepts that the concept extends.
 
 ```EBNF
 ConceptDecl = 'concept' '{' { ConceptMemberSpec } '}' .
@@ -138,7 +144,7 @@ ConceptFieldSpec = identifier TypeName .
 ```
 
 
-Here's an example of a concept with a method:
+An example of a concept with a method:
 
 ```Go
 concept Loggable {
@@ -146,17 +152,59 @@ concept Loggable {
 }
 ```
 
-Concepts can be generic:
+An example of a concept with a field:
+
+```Go
+concept Entity {
+	Id uint64
+}
+```
+To implement this concept a concrete type must have a field named `Id` (which obviously means it's a `struct`)
+
+We can use `Entity` in a generic function declaration:
+
+```Go
+\T Entity/ func ShowId(t T) { 
+	fmt.Println("Id is: ", t.Id)
+}
+```
+
+We can define a type that implements `Entity`:
+
+```Go
+type Employee struct {
+	Id uint64
+	Name string
+}
+```
+
+and use it:
+
+```Go
+var employee = Employee{1, "Chr. Surlykke"}
+
+ShowId\Employee/(employee)
+```
+
+An example of a generic concept:
 
 ```Go
 \T/ concept Cloneable {
 	Clone() T
 }
 ```
-  
-So with: 
 
+which we can use in a generic function:
+
+```Go
+\T Cloneable\T/ / func copy(t T) {
+	return t.CLone()
+}
 ```
+
+So with a type implementing `Cloneable`: 
+
+```Go
 type Person struct {
 	Name string
 }
@@ -170,57 +218,22 @@ type Person struct {
 one can do:
 
 ```Go
-\C Cloneable\C/ / func copy(c C) {
-	return c.CLone()
-}
+var person1 = Person{"John Doe"}
+
+var person2 = copy\Person/(person1)
 ```
-
-### Concepts with fields
-
-Fields on concepts are defined like this:
-
-```Go
-concept Entity {
-	Id uint64
-}
-```
-
-A generic function: 
-
-```Go
-\T Entity/ func ShowId(t T) { 
-	fmt.Println("Id is: ", t.Id)
-}
-```
-
-An implementation:
-
-```Go
-type Employee struct {
-	Id uint64
-	Name string
-}
-```
-
-wich can be used:
-
-```
-var employee = Employee{1, "Chr. Surlykke"}
-
-ShowId\Employee/(employee)
-```
-
 
 ### Operators and built-in functions
 
-There will be no syntax to explicitly define operators on concepts. 
+There will be no syntax to _explicitly_ associate operators and built-in methods on concepts. 
 Instead we will define a set of _built in_ concepts that have operators and standard functions associated with them.
 
 One example of a built in concept is `Ordered`. 
+
 `Ordered` defines the comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=` and is implemented by 
 string-, floating-point- and integer types.
 
-As an example:
+`Ordered` may be used in a generic function like this:
 
 ```Go
 \T Ordered/ func Min(t1 t2 T) T {
@@ -257,7 +270,7 @@ The full list of built-in concepts are:
 * `Bool` 
   * Operators: `==`, `!=`, `&&`, `||`, `!`
   * Built in functions:
-  * Implemented by: _boolean types_
+  * Implemented by: 
   * Note: `Bool` is special in that type parameters implementing `Bool` may be used in conditionals. Eg:
     ```Go
 	\B Bool/ func F(b B) {
@@ -296,28 +309,16 @@ The full list of built-in concepts are:
   * Operators: `<-` _(read and write)_
   * Built in functions: `make`, `close`, `cap`
   * Implemented by: _channels of `T`_
+* `Ptr\T/`
+  * Operators: `*`
+  * Built in functions: _none_
+  * Implemented by: pointer types pointing to `T` 
+
 
 A few clarifications:
 
 * A concept that is implemented by a type T is also implemented by any type that has T as underlying type.  
   Eg: `type AppleCount int` implements `Integer`, `Number`, `Additive`
-* `Bool` is included in the table.  That may seem a strange choice: 
-  How would you write a generic type or function with a Bool parameter? Well, Go allows this:
-
-  ```
-  type MyBool bool
-  ```
-
-  which creates a type distinct from bool but succeptible to the same operations. 
-  This allows generic definitions handling all such types.
-  I must, however, admit I'm not able to come up with a convincing use for such types, 
-  so let's say I've added `Bool` for completeness.
-
-* I've also included `String` in the table. 
-  You can derive types from string in the same way as for bool, but the usefulness of types with `string` as 
-  underlying type is more obvious.
-
-
 * Some of the built-in concepts have _built-in functions_ associated with them. 
   For example `Slice` defines the functions `make`, `len` and `cap`, so you can do stuff like:
 
@@ -329,24 +330,6 @@ A few clarifications:
   ```
 
   This constitutes a way of hooking up generics and Concepts with the generics that is built into Go today.
-
-## Embedding 
-
-Just like interfaces, a concept can _embed_ an other 
-
-```Go
-concept Foo {
-	...
-}
-
-concept Baat {
-	Foo
-	...
-}
-
-```
-
-whereby Baa gets all methods, fields, operators and functions of Foo.
 
 You could say that some of the built-in concepts embeds one another: For example the concept 'Integer' embeds the concept 'Number', 
 but since these concepts are to be built-in, and not defined in explicit go-source, that is of minor importance.
