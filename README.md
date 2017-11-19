@@ -209,13 +209,13 @@ is satisfied by types having both methods `Read` and `Write`.
 
 ### Named constraints
 
-_Named_ constraints may be declared at package level. It's done with a new keyword, `concept`.
+_Named_ constraints may be declared at package level. It's done with a new keyword, `constraint`.
 
 A couple of examples:
 ```Go
-concept Loggable :Log()
+constraint Loggable :Log()
 
-concept Integer :uint8 || :uint16 || :uint32 || :uint64 || 
+constraint Integer :uint8 || :uint16 || :uint32 || :uint64 || 
                 :int8 || :int16 || :int32 || :int64 || :uint || :int || :intptr
 ```
 
