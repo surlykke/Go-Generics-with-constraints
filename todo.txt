@@ -1,0 +1,7 @@
+* Make ORM example
+* Make slice api example with a look to javascripts Array api
+* Scope
+* Write about assignment, and built-in functions
+* Write (more) about combining constraints
+
+
