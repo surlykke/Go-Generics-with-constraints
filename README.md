@@ -112,7 +112,7 @@ There will be 3 kinds of constraints.
 
 1. Method: Concrete types are required to have a method.
 1. Field: Concrete types are required to have a field.
-1. Underlying type: Concrete types are required to have a specific underlying type.
+1. Type: Concrete types are required to have a one of a list of types as its underlying type.
 
 Constraints may be combined by conjunction or disjunction.
 
@@ -152,12 +152,13 @@ Which could be used like:
 }
 ```
 
-### Underlying type constraints
+### Type constraints
 
-The form of an underlying type constraint is:
+The form of a type constraint is:
 
 ```EBNF
-UnderlyingTypeConstraint = ":" (BasicTypeName | TypeLit) .
+TypeConstraint = SingeTypeConstraint { '||' SingleTypeConstraint }
+SingleTypeConstraint = ":" (BasicTypeName | TypeLit) .
 BasicTypeName = identifier .
 ```
 
@@ -169,43 +170,23 @@ An example:
 	              // literal '1' to T is possible and the operator '+' can be applied
 				  // yielding a result of type T
 }
-
-type Apples int 
-
-var a Apples = 1
-
-fmt.Println(Increment\Apples/(a))
 ```
+
+Constraining to one of more types:
+
+```Go
+\T :uint8 || :uint16 || :uint32 || :uint64/ ...
+```
+
 ### Combining constraints
 
-Constraints may be combined by _conjunction_ or _disjunction_. 
+Constraints may be combined by _conjunction_. 
 
 The conjunction of two constraints `C1` and `C2` is written:
 ```Go
 C1 && C2
 ```
 It is fulfilled by any type that fulfills _both_ `C1` and `C2`.
-
-The disjunction of constraints `C1` and `C2` is written:
-```Go
-C1 || C2
-```
-and is fulfilled by any type that fulfills `C1` _or_ `C2`. 
-
-Here, as usual, `&&` has higher precedence that `||`, so, for example, `C1 || C2 && C3` 
-is equal to `C1 || (C2 && C3)`
-
-Disjunction is mainly useful for underlying types. For example constraining a type parameter with:
-```Go
-:uint8 || :uint16 || :uint32 || :uint64 || :int8 || :int16 || :int32 || :int64 || :uint || :int || :intptr
-```
-will tell us that the type is an integer of sorts, and that - among others - the operators `<<` and `>>` may be used.
-
-Conjunction is mainly useful for method- and field constraints. For example
-```Go
-:Write([]byte) (int, error) && :Read([]byte) (int, error)
-```
-is satisfied by types having both methods `Read` and `Write`.
 
 ### Named constraints
 
@@ -232,6 +213,18 @@ or
 	return i << 1
 }
 ```
+
+The full syntax for constraints:
+```EBNF
+Constraint = SingleConstraint { '&&' SingleConstraint } .
+SingleConstraint = ( ConstraintName | MethodConstraint | FieldConstraint | TypeConstraint ) .
+ConstraintName = identifier .
+```
+And declaration of named constraints:
+```EBNF
+NamedConstraintDecl = 'constraint' identifier Constraint . 
+```
+
 
 ### Specialization 
 
