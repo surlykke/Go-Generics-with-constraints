@@ -112,9 +112,9 @@ There will be 3 kinds of constraints.
 
 1. Method: Concrete types are required to have a method.
 1. Field: Concrete types are required to have a field.
-1. Type: Concrete types are required to have a one of a list of types as its underlying type.
+1. Underlying type: Concrete types are required to have a one of a list of types as its underlying type.
 
-Constraints may be combined by conjunction or disjunction.
+Constraints may be combined by conjunction.
 
 ### Method constraints
 
@@ -152,13 +152,12 @@ Which could be used like:
 }
 ```
 
-### Type constraints
+### Underlying type constraints
 
-The form of a type constraint is:
+The form of an underlying type constraint is:
 
 ```EBNF
-TypeConstraint = SingeTypeConstraint { '||' SingleTypeConstraint }
-SingleTypeConstraint = ":" (BasicTypeName | TypeLit) .
+UnderlyingTypeConstraint = ":" (BasicTypeName | TypeLit) .
 BasicTypeName = identifier .
 ```
 
@@ -170,14 +169,13 @@ An example:
 	              // literal '1' to T is possible and the operator '+' can be applied
 				  // yielding a result of type T
 }
+
+type Apples int 
+
+var a Apples = 1
+
+fmt.Println(Increment\Apples/(a))
 ```
-
-Constraining to one of more types:
-
-```Go
-\T :uint8 || :uint16 || :uint32 || :uint64/ ...
-```
-
 ### Combining constraints
 
 Constraints may be combined by _conjunction_. 
@@ -213,18 +211,6 @@ or
 	return i << 1
 }
 ```
-
-The full syntax for constraints:
-```EBNF
-Constraint = SingleConstraint { '&&' SingleConstraint } .
-SingleConstraint = ( ConstraintName | MethodConstraint | FieldConstraint | TypeConstraint ) .
-ConstraintName = identifier .
-```
-And declaration of named constraints:
-```EBNF
-NamedConstraintDecl = 'constraint' identifier Constraint . 
-```
-
 
 ### Specialization 
 
