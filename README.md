@@ -112,7 +112,7 @@ There will be 3 kinds of constraints.
 
 1. Method: Concrete types are required to have a method.
 1. Field: Concrete types are required to have a field.
-1. Underlying type: Concrete types are required to have a one of a list of types as its underlying type.
+1. Type: Concrete types are required to have a one of a list of types as its underlying type.
 
 Constraints may be combined by conjunction.
 
@@ -134,7 +134,7 @@ We associate a type parameter with a constraint by following it by a constraint 
 }
 ```
 
-Now `DoLog` can only be instantiated with types that have a method `Log()`.
+Now `DoLog` can only be instantiated with types that have the method `Log()`.
 
 ### Field constraints
 
@@ -152,30 +152,36 @@ Which could be used like:
 }
 ```
 
-### Underlying type constraints
+### Type constraints
 
-The form of an underlying type constraint is:
+The form of a type constraint is:
 
 ```EBNF
-UnderlyingTypeConstraint = ":" (BasicTypeName | TypeLit) .
+TypeConstraint = ":" (BasicTypeName | TypeLit) { TypeConstraint } 
 BasicTypeName = identifier .
 ```
+Informally a type constraint is a list of types, each preceded by a ':'. 
+The meaning of such a constraint is that a concrete type must have _one of_ the types in the list as its underlying type.
 
-An example:
+An example with one underlying type:
 
 ```Go
-\T :int/ Increment(t T) T {
+\T :int/ Increment(t T) T { 
 	return t + 1  // It is known that the underlying type of T is int, so a cast from
 	              // literal '1' to T is possible and the operator '+' can be applied
 				  // yielding a result of type T
 }
-
-type Apples int 
-
-var a Apples = 1
-
-fmt.Println(Increment\Apples/(a))
 ```
+
+An example with several underlying types:
+```Go
+\T :uint8:uint16:uint32:uint64/ Shift(t T, npos int) T {
+	return t << npos // It is known that all possible underlying types of T 
+	                 // support leftshift.
+}
+
+```
+
 ### Combining constraints
 
 Constraints may be combined by _conjunction_. 
@@ -186,16 +192,22 @@ C1 && C2
 ```
 It is fulfilled by any type that fulfills _both_ `C1` and `C2`.
 
+So eg: `.Log() && :uint8` would be fulfilled by any type having the method `Log()` and the underlying type `uint8`.
+
 ### Named constraints
 
-_Named_ constraints may be declared at package level. It's done with a new keyword, `constraint`.
+Named constraints may be declared at package level. It's done with a new keyword, `constraint`:
+
+```EBNF
+NamedConstraintDecl = 'constraint' identifier Constraint . 
+```
 
 A couple of examples:
+
 ```Go
 constraint Loggable :Log()
 
-constraint Integer :uint8 || :uint16 || :uint32 || :uint64 || 
-                :int8 || :int16 || :int32 || :int64 || :uint || :int || :intptr
+constraint Integer :uint8:uint16:uint32:uint64:int8:int16:int32:int64:uint:int:intptr
 ```
 
 Named constraints may be used just like other constraints. For example:
@@ -207,84 +219,58 @@ Named constraints may be used just like other constraints. For example:
 ```
 or
 ```Go
-\I Integer/ func MultiplyBy2(i I) I {
-	return i << 1
+\I Integer/ func MultiplyBy2AndAddOne(i I) I {
+	return (i << 1) + 1
 }
 ```
 
-### Specialization 
+## Generic constraints
 
-In C++ template programming you may employ specialization and SFINAE to customize a generic definition for certain types. 
+Named constraints can be generic. An example:
 
-Template specialization relies on overloading, and would not, in my opinion, be a good fit for Go. 
+```EBNF
+\T/ constraint List :[]T
+```
 
-SFINAE basically means that you can create several definitions of a generic type/function and the compiler will decide at 
-point of instantiation which one 'works'. This is obviously at odds with the goals of this proposal.
-
-On the other hand some kind of conditional behaviour for generic definitions could be beneficial. Consider the `Max` function:
+So constraining a type to have []int as it's underlying type could be done as:
 
 ```Go
-\T Ordered/ func Max(t1,t2 T) T {
-	if t1 < t2 {
-		return t2
-	} else {
-		return t1
-	}
-}
+\T List\int/ / ...
 ```
 
-It would be nice to extend this function to types that are not `Ordered`, but have a method `LessThan`:
+Another example:
 
 ```Go
-\T/ constraint Lessable {
-	LessThan(other T) bool
-}
+\C/ constraint Comparer .Compare(C) int
 
-\T Lessable\T/ / func Max(t1, t2 T) T {
-	if t1.LessThan(t2) {
-		return t2
-	} else {
-		return t1
-	}
-}
+\T Comparer\T/ / type SortableVector []T
 ```
 
-We can't have these two definitions at the same time as overloading is not allowed. 
-One could consider some form of static type switch:
+## Comparable
+
+There will be one built-in constraint, `Comparable`. To satisfy it a concrete type must be just that, comparable. 
+This constraint is built-in because the operators `==` and `!=` - unlike other binary operators - apply to an infinite number of underlying types 
+and so the constraint cannot be expressed by the means given above.
+
+One of its uses is in defining generic maptypes. For example:
 
 ```Go
-\T/ func Max(t1, t2 T) T {
-	var t1_less_than_t2 bool
-	
-	switch\T/ {
-	case Ordered:
-		t1_less_than_t2 = t1 < t2
-	case Lessable: 
-		t1_less_than_t2 = t1.LessThan(t2)
-	}
-
-	if t1_less_than_t2 {
-		return t2
-	} else {
-		return t1
-	}
-}
+\K Comparable, V/ MapType [K]V
 ```
 
-The idea could be:
+## Some standard constraints
 
-*   The compiler (still) verifies the correctness of this code at the point of definition.
-*   On instantiation apply the first switch case that matches (ie. `T` implements the constraint).
-*   If no case matches, the compiler issues a compile error, something like "Type must implement one of `Ordered`, `Lessable`."
-*   A `default` entry is allowed, so that all types can be handled in one switch.    
-    
-I have not included type switch in this proposal.
-While this construct works nicely for the `Max` example, 
-I'm not convinced that it's usefulness is broad enough to warrant its addition to Go. 
+A number of constraints will be so common that it would make sense to include them in Go's standard library. These include:
 
-I feel the subject is complicated enough that it should be considered separately.
+```Go
+constraint Integer :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int
 
+constraint Number :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int:float32:float64:complex64:complex128
 
+constraint Addable :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int:float32:float64:complex64:complex128:string
+ 
+constraint Ordered :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int:float32:float64:string 
+```
 
 
 ## Overloading generic definitions
@@ -359,7 +345,74 @@ the appearence of `\` and `/` in it's name.
 Whats written above constitutes my proposal for generics with constraints in Go. 
 Here I'll mention some variations and additions that could be considered.
 
-TODO: Variadic templates.
+### Specialization 
+
+In C++ template programming you may employ specialization and SFINAE to customize a generic definition for certain types. 
+
+Template specialization relies on overloading, and would not, in my opinion, be a good fit for Go. 
+
+SFINAE basically means that you can create several definitions of a generic type/function and the compiler will decide at 
+point of instantiation which one 'works'. This is obviously at odds with the goals of this proposal.
+
+On the other hand some kind of conditional behaviour for generic definitions could be beneficial. Consider the `Max` function:
+
+```Go
+\T Ordered/ func Max(t1,t2 T) T {
+	if t1 < t2 {
+		return t2
+	} else {
+		return t1
+	}
+}
+```
+
+It would be nice to extend this function to types that are not `Ordered`, but have a method `LessThan`:
+
+```Go
+\T .LessThan(T) bool/ func Max(t1, t2 T) T {
+	if t1.LessThan(t2) {
+		return t2
+	} else {
+		return t1
+	}
+}
+```
+
+We can't have these two definitions at the same time as overloading is not allowed. 
+One could consider a _generic switch_:
+
+```Go
+\T/ func Max(t1, t2 T) T {
+	switch\T/ {
+	case Ordered:
+		if t1 < t2 {
+			return t2
+		} else {
+			return t1
+		}
+	case .LessThan(T) bool: 
+		if t1.LessThan(t2) {
+			return t2
+		} else {
+			return t1
+		}
+	}
+}
+```
+
+The idea would be:
+
+*   The compiler (still) verifies the correctness of this code at the point of definition.
+*   On instantiation apply the first switch case that matches (ie. `T` implements the constraint).
+*   If no case matches, the compiler issues a compile error, something like "Type must implement one of `Ordered`, `Lessable`."
+*   A `default` entry is allowed, so that all types can be handled in one switch.    
+    
+I have not included type switch in this proposal.
+While this construct works nicely for the `Max` example, 
+I'm not convinced that it's usefulness is broad enough to warrant its addition to Go. 
+
+I feel the subject is complicated enough that it should be considered separately.
+
 
 ### Variadic definitions
 
