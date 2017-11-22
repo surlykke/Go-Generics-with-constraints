@@ -157,11 +157,11 @@ Which could be used like:
 The form of a type constraint is:
 
 ```EBNF
-TypeConstraint = ":" (BasicTypeName | TypeLit) { TypeConstraint } 
+TypeConstraint = ":" (BasicTypeName | TypeLit) { '||' TypeConstraint } 
 BasicTypeName = identifier .
 ```
-Informally a type constraint is a list of types, each preceded by a ':'. 
-The meaning of such a constraint is that a concrete type must have _one of_ the types in the list as its underlying type.
+Informally a type constraint formed from a number of types combined with the `||`-operator. 
+To satisfy such a constraint a concrete type must have _one of_ the given types as its underlying type.
 
 An example with one underlying type:
 
@@ -175,7 +175,7 @@ An example with one underlying type:
 
 An example with several underlying types:
 ```Go
-\T :uint8:uint16:uint32:uint64/ Shift(t T, npos int) T {
+\T  :uint8 || :uint16 || :uint32 || :uint64/ Shift(t T, npos int) T {
 	return t << npos // It is known that all possible underlying types of T 
 	                 // support leftshift.
 }
@@ -263,13 +263,20 @@ One of its uses is in defining generic maptypes. For example:
 A number of constraints will be so common that it would make sense to include them in Go's standard library. These include:
 
 ```Go
-constraint Integer :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int
+constraint Integer :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
+                   :int8 || :int16 || :int32 || :int64 || :int
 
-constraint Number :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int:float32:float64:complex64:complex128
+constraint Number :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
+                  :int8 || :int16 || :int32 || :int64 || :int || 
+				  :float32 || :float64 || :complex64 || :complex128
 
-constraint Addable :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int:float32:float64:complex64:complex128:string
+constraint Addable :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
+                   :int8 || :int16 || :int32 || :int64 || :int || 
+                   :float32 || :float64 || :complex64 || :complex128 || :string
  
-constraint Ordered :uint8:uint16:uint32:uint64:uint:int8:int16:int32:int64:int:float32:float64:string 
+constraint Ordered :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
+                   :int8 || :int16 || :int32 || :int64 || :int || 
+				   :float32 || :float64 || :string 
 ```
 
 
