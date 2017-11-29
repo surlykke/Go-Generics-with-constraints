@@ -19,24 +19,26 @@ outlining how to add generics to Go.
 Most of the discussion has taken place in issue [15292](https://github.com/golang/go/issues/15292).
 
 In [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
-Taylor introduces the idea of _constraints_: Concrete instantions of type parameter could be  required to implement an _interface_. 
-It would look like
+Taylor describes an implementation, where the compiler would analyze a generic definition and extract from it _restrictions_.
+
+For example, given a generic definition:
 ```Go
-gen [T Stringer] type PrintableVector []T
+func [T] Add(x1,x2 T) T {
+	return x1 + x2
+}
 ```
-and would mean that `PrintableVector` could only be instantiated with types `T` that implement the `Stringer` interface. 
+A compiler should extract the restriction 'addable' - that a concrete type must support the addition operator, and the compiler would 
+use that knowledge in checking the validity of concrete instantiations of `Add`.
 
-In later proposals Taylor abandons this approach in favor of having the compiler _extract_ constraints from a generic definition.
-
-What I want to do here is develop the idea constraints fully. 
+What I want to do here is develop an alternative to that: Rather than having the compiler extract restrictions, 
+put the onus on the developer to declare these restrictions (which I'll call constraints)  _explicitly_.
 
 So I propose generics for Go with constraints:
 
 Generics means that types and functions may be _parametrized_, ie. depend on type parameters. 
-There may be _constraints_ on a type parameter. The effect of that is twofold: 
-It determines what _concrete types_ can be substituted for the parameter and it determines _what you can do_ with the parameter 
-in the generic definition.  
 
+Constraints means limits on what concrete types may be substituted for a type parameter. 
+This determines _what you can do_ with the parameter in the generic definition.  
 
 The aim is that the correctness of a generic definition can be verified at the point of _definition_:  
 When instantiating a generic type, the compiler only needs to verify that the concrete types substituted for the type parameters 
@@ -46,7 +48,7 @@ I believe that with this, the compiler can be made simpler, the code will be mor
 
 ## Generics
 
-Type- and function definitions at the top level may be generic. That means they may depend on type parameters. An example:
+Type- and function definitions at package level may be generic. That means they may depend on type parameters. An example:
 
 ```Go
 \T/ type List struct {
@@ -112,7 +114,7 @@ There will be 3 kinds of constraints.
 
 1. Method: Concrete types are required to have a method.
 1. Field: Concrete types are required to have a field.
-1. Type: Concrete types are required to have a one of a list of types as its underlying type.
+1. Type: Limits what underlying types a concrete type may have.
 
 Constraints may be combined by conjunction.
 
@@ -134,7 +136,7 @@ We associate a type parameter with a constraint by following it by a constraint 
 }
 ```
 
-Now `DoLog` can only be instantiated with types that have the method `Log()`.
+Now `DoLog` can only be instantiated with concrete types that have the method `Log()`.
 
 ### Field constraints
 
@@ -152,6 +154,8 @@ Which could be used like:
 }
 ```
 
+So concrete types substituted for `Entity` must have a field `Id` of type `long`.
+
 ### Type constraints
 
 The form of a type constraint is:
@@ -160,7 +164,7 @@ The form of a type constraint is:
 TypeConstraint = ":" (BasicTypeName | TypeLit) { '||' TypeConstraint } 
 BasicTypeName = identifier .
 ```
-Informally a type constraint formed from a number of types combined with the `||`-operator. 
+Informally a type constraint is formed from a number of types combined with the `||`-operator. 
 To satisfy such a constraint a concrete type must have _one of_ the given types as its underlying type.
 
 An example with one underlying type:
@@ -192,7 +196,7 @@ C1 && C2
 ```
 It is fulfilled by any type that fulfills _both_ `C1` and `C2`.
 
-So eg: `.Log() && :uint8` would be fulfilled by any type having the method `Log()` and the underlying type `uint8`.
+For example: `.Log() && :uint8` would be fulfilled by any type having the method `Log()` and the underlying type `uint8`.
 
 ### Named constraints
 
@@ -224,7 +228,7 @@ or
 }
 ```
 
-## Generic constraints
+### Generic constraints
 
 Named constraints can be generic. An example:
 
@@ -246,7 +250,7 @@ Another example:
 \T Comparer\T/ / type SortableVector []T
 ```
 
-## Comparable
+### Comparable
 
 There will be one built-in constraint, `Comparable`. To satisfy it a concrete type must be just that, comparable. 
 This constraint is built-in because the operators `==` and `!=` - unlike other binary operators - apply to an infinite number of underlying types 
@@ -258,7 +262,7 @@ One of its uses is in defining generic maptypes. For example:
 \K Comparable, V/ MapType [K]V
 ```
 
-## Some standard constraints
+### Some standard constraints
 
 A number of constraints will be so common that it would make sense to include them in Go's standard library. These include:
 
@@ -279,8 +283,56 @@ constraint Ordered :uint8 || :uint16 || :uint32 || :uint64 || :uint ||
 				   :float32 || :float64 || :string 
 ```
 
+### A note on implementation
 
-## Overloading generic definitions
+The compiler could represent a constraint as 
+
+```Go
+type Constraint struct {
+	Methods MethodSet
+	Fields  FieldSet
+	Types   TypeSet
+}
+```
+with `MethodSet`, `FieldSet` and `TypeSet` being types suitable for representing 
+sets of methods, fields and types, respectively.
+
+The type `TypeSet` must also be capable of representing 'any underlying type' which 
+we'll denote by the constant `AnyType`, and 'any comparable underlying type' which we'll
+denote by `AnyComparable`.
+
+If `C1`, `C2` are constraints and `C3` is the conjunction of `C1` and `C2` then:
+
+* `C3.Methods` is the union of `C1.Methods` and `C2.Methods`
+* `C3.Fields` is the union of `C1.Fields` and `C2.Fields`
+* `C3.Types` is the intersection of `C1.Types` and `C2.Types`, and specifically:
+	* If `C1.Types` is 'any type' then `C3.Types` is equal to `C2.Types`
+	* If `C1.Types` is 'any comparable type' then `C3.Types` is equal to the subset
+	  of `C2.Types` that are comparable.
+
+A constraint `C` is _unsatisfiable_ if
+
+* `C.Types` is empty
+* `C.Fields` is non-empty and none of the members of `C.Types` has all the fields
+  of 'C.Fields'.   
+  'any type' allways fulfills this condition.  
+  'any comparable type' fulfills it if all members of `C.Fields` are comparable.
+
+If the compiler encounters an unsatisfiable constraint it must emit an error.
+
+A constraint `C2` _implies_ constraint `C1` if
+
+* `C1.Methods` is a subset of `C2.Methods`
+* `C1.Fields` is a subset of `C2.Fields`
+* `C2.Types` is a subset of `C1.Types`
+
+
+## More on generic definitions
+
+Given the description of constraints above, there are a few more points to be made about generics.
+
+
+### Overloading generic definitions
 
 Overloading of generic definitions with the _same_ number of type parameters is _not_ allowed: 
 
@@ -301,7 +353,7 @@ So:
 ```
 is ok.
 
-## Type methods
+### Type methods
 
 Generic types can have methods:
 
@@ -325,7 +377,7 @@ Hence this is not allowed:
 
 when `Constraint1` is different from `Constraint2`
 
-## Runtime
+### Runtime
 
 Concrete instantions of generic types and functions should look like ordinary hand coded ones. Given:
 
