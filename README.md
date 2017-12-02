@@ -331,6 +331,20 @@ A constraint `C2` _implies_ constraint `C1` if
 
 Given the description of constraints above, there are a few more points to be made about generics.
 
+### Referring to generic types or functions in a generic definition
+
+Consider:
+
+```Go
+\U Constraint1/ type FooType ...
+
+\U Constraint2/ type BaaType struct {
+	foo FooType\U/
+}
+```
+
+For the second declaration to be valid, `U` must satisfy `Constraint1`, and the compiler must verify that.
+In this case the compiler shall check that `Constraint2` implies `Constraint1`.
 
 ### Overloading generic definitions
 
