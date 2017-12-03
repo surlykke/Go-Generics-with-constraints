@@ -2,9 +2,9 @@ _Note: This project serves as a placeholder.
 Once it is done I hope to have it added to [Go Proposals](https://github.com/golang/proposal).
 If that happens this project will be deleted_
 
-# Generics with constraints for Go
+# Generics with concepts for Go
 
-This is a proposal for adding generics with constraints to the Go language. 
+This is a proposal for adding generics with concepts to the Go language. 
 It is written by Christian Surlykke, fall of 2017.
 
 There have been lots of discussion on how generics in Go could look. 
@@ -19,7 +19,7 @@ outlining how to add generics to Go.
 Most of the discussion has taken place in issue [15292](https://github.com/golang/go/issues/15292).
 
 In [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
-Taylor describes an implementation, where the compiler would analyze a generic definition and extract from it _restrictions_.
+Taylor describes an implementation, where the compiler would analyze a generic definition and extract _restrictions_ from it.
 
 For example, given a generic definition:
 ```Go
@@ -27,26 +27,35 @@ func [T] Add(x1,x2 T) T {
 	return x1 + x2
 }
 ```
-A compiler should extract the restriction 'addable' - that a concrete type must support the addition operator, and the compiler would 
-use that knowledge in checking the validity of concrete instantiations of `Add`.
+A compiler should extract the restriction 'addable' - that a concrete type substituted for `T` must support the addition operator, 
+and the compiler would use that knowledge in checking the validity of concrete instantiations of `Add`.
 
 What I want to do here is develop an alternative to that: Rather than having the compiler extract restrictions, 
-put the onus on the developer to declare these restrictions (which I'll call constraints)  _explicitly_.
+put the onus on the developer to declare these restrictions _explicitly_.
 
-So I propose generics for Go with constraints:
+So I propose generics for Go with _concepts_:
 
 Generics means that types and functions may be _parametrized_, ie. depend on type parameters. 
+They may be instantiated with _concrete types_ substituted for the type parameters.
 
-Constraints means limits on what concrete types may be substituted for a type parameter. 
-This determines _what you can do_ with the parameter in the generic definition.  
+Concepts are used to associate a _contract_ with a type parameter in much the same way that 
+an interface can be used to impose a contract on an ordirnay parameter.
+Like interfaces, concepts define a _method set_, but a concept may also define a set of _fields_ 
+and/or a set of _operators_.
+
+What you can do with a type parameter in a generic definition is that which it's associated concept defines. 
+You may call methods on the type parameter, access fields on it or apply operators to it, only if it is associated 
+with a concept that has those methods, fields or operators.
 
 The aim is that the correctness of a generic definition can be verified at the point of _definition_:  
 When instantiating a generic type, the compiler only needs to verify that the concrete types substituted for the type parameters 
-fulfill the constraints given, and then the validity of the instantiation follows.
+implements the given concepts, and then the validity of the instantiation follows.
 
 I believe that with this, the compiler can be made simpler, the code will be more readable and that it will allow for better tooling.
 
 ## Generics
+
+First, let's lay out generics looks.
 
 Type- and function definitions at package level may be generic. That means they may depend on type parameters. An example:
 
@@ -61,22 +70,21 @@ Type- and function definitions at package level may be generic. That means they 
 }
 ```
 
-Here, we do not call any methods on `value`, access any fields, or apply any operators on it. As we haven't said anything about `T`,
+Here, we do not call any methods on `value`, access any fields, or apply any operators on `T`. As we haven't said anything about `T`,
 we can't make any assumptions about what can be done with it.
 
 We can use our generic definition like this:
 
 ```Go
-var myList List\int/
+var myList *List\int/ = nil
 
-Push\int/(&myList, 2)
-Push\int/(&myList, 4)
+myList = Push\int/(&myList, 2)
+myList = Push\int/(&myList, 4)
 
 for l := &myList; l != null; l = l.next {
 	fmt.Println(l.value)
 }
 ```
-
 
 ### A note about the syntax
 
@@ -106,29 +114,19 @@ I would like to point out, though, that neither the choice of delimiters nor the
 It could easily be rewritten to use another pair of delimiters and type deduction could be added. 
 Both at the cost of some increase in compiler complexity.
 
-## Constraints
+## Declaring concepts
 
-We will allow type parameters in generic definitions to be associated with _constraints_ on what concrete types can be substituted for them.
-
-There will be 3 kinds of constraints. 
-
-1. Method: Concrete types are required to have a method.
-1. Field: Concrete types are required to have a field.
-1. Type: Limits what underlying types a concrete type may have.
-
-Constraints may be combined by conjunction.
-
-### Method constraints
-
-A method requirement has this form:
+A concept declaration allows explicit definition of methods, fields and/or other concepts that the concept extends.
 
 ```EBNF
-MethodConstraint = '.' identifier Signature .
+ConceptDecl = 'concept' '{' { ConceptMemberSpec } '}' .
+ConceptMemberSpec = ConceptMethodSpec | ConceptFieldSpec | ConceptName .
+ConceptMethodSpec = identifier Signature .
+ConceptFieldSpec = identifier TypeName .
 ```
-where [identifier](https://golang.org/ref/spec#identifier) and [Signature](https://golang.org/ref/spec#Signature) 
-are defined as in the [The Go Programming Language Specification](https://golang.org/ref/spec)
 
-We associate a type parameter with a constraint by following it by a constraint in the type parameter list:
+
+An example of a concept with a method:
 
 ```Go
 \T .Log()/ func DoLog(t T) {
@@ -136,238 +134,226 @@ We associate a type parameter with a constraint by following it by a constraint 
 }
 ```
 
-Now `DoLog` can only be instantiated with concrete types that have the method `Log()`.
-
-### Field constraints
-
-The form of a field constraint is:
-
-```EBNF
-FieldConstraint = "." identifier Type.
-```
-
-Which could be used like:
+An example of a concept with a field:
 
 ```Go
 \Entity .Id long/ func Equal(e1, e2 Entity) bool {
 	return e1.Id == e2.Id
 }
 ```
+To implement this concept a concrete type must have a field named `Id` (which obviously means it's a `struct`)
 
-So concrete types substituted for `Entity` must have a field `Id` of type `long`.
-
-### Type constraints
-
-The form of a type constraint is:
-
-```EBNF
-TypeConstraint = ":" (BasicTypeName | TypeLit) { '||' TypeConstraint } 
-BasicTypeName = identifier .
-```
-Informally a type constraint is formed from a number of types combined with the `||`-operator. 
-To satisfy such a constraint a concrete type must have _one of_ the given types as its underlying type.
-
-An example with one underlying type:
+We can use `Entity` in a generic function declaration:
 
 ```Go
-\T :int/ Increment(t T) T { 
-	return t + 1  // It is known that the underlying type of T is int, so a cast from
-	              // literal '1' to T is possible and the operator '+' can be applied
-				  // yielding a result of type T
+\T Entity/ func ShowId(t T) { 
+	fmt.Println("Id is: ", t.Id)
 }
 ```
 
-An example with several underlying types:
+We can define a type that implements `Entity`:
+
 ```Go
-\T  :uint8 || :uint16 || :uint32 || :uint64/ Shift(t T, npos int) T {
-	return t << npos // It is known that all possible underlying types of T 
-	                 // support leftshift.
+type Employee struct {
+	Id uint64
+	Name string
 }
 
 ```
 
-### Combining constraints
-
-Constraints may be combined by _conjunction_. 
-
-The conjunction of two constraints `C1` and `C2` is written:
-```Go
-C1 && C2
-```
-It is fulfilled by any type that fulfills _both_ `C1` and `C2`.
-
-For example: `.Log() && :uint8` would be fulfilled by any type having the method `Log()` and the underlying type `uint8`.
-
-### Named constraints
-
-Named constraints may be declared at package level. It's done with a new keyword, `constraint`:
-
-```EBNF
-NamedConstraintDecl = 'constraint' identifier Constraint . 
-```
-
-A couple of examples:
+and use it:
 
 ```Go
-constraint Loggable :Log()
+var employee = Employee{1, "Chr. Surlykke"}
 
-constraint Integer :uint8:uint16:uint32:uint64:int8:int16:int32:int64:uint:int:intptr
+ShowId\Employee/(employee)
 ```
 
-Named constraints may be used just like other constraints. For example:
+An example of a generic concept:
 
 ```Go
-\T Loggable/ func DoLog(t T) {
-	t.Log()
-}
-```
-or
-```Go
-\I Integer/ func MultiplyBy2AndAddOne(i I) I {
-	return (i << 1) + 1
+\T/ concept Cloneable {
+	Clone() T
 }
 ```
 
-### Generic constraints
-
-Named constraints can be generic. An example:
-
-```EBNF
-\T/ constraint List :[]T
-```
-
-So constraining a type to have []int as it's underlying type could be done as:
+which we can use in a generic function:
 
 ```Go
-\T List\int/ / ...
+\T Cloneable\T/ / func copy(t T) {
+	return t.CLone()
+}
 ```
 
-Another example:
+So with a type implementing `Cloneable`: 
 
 ```Go
-\C/ constraint Comparer .Compare(C) int
+type Person struct {
+	Name string
+}
 
-\T Comparer\T/ / type SortableVector []T
+(p Person) func Clone() Person {
+	return Person{p.Name}
+}
+
 ```
 
-### Comparable
-
-There will be one built-in constraint, `Comparable`. To satisfy it a concrete type must be just that, comparable. 
-This constraint is built-in because the operators `==` and `!=` - unlike other binary operators - apply to an infinite number of underlying types 
-and so the constraint cannot be expressed by the means given above.
-
-One of its uses is in defining generic maptypes. For example:
+one can do:
 
 ```Go
-\K Comparable, V/ MapType [K]V
+var person1 = Person{"John Doe"}
+
+var person2 = copy\Person/(person1)
 ```
 
-### Some standard constraints
+### Operators and built-in functions
 
-A number of constraints will be so common that it would make sense to include them in Go's standard library. These include:
+There will be no syntax to _explicitly_ associate operators and built-in methods on concepts. 
+Instead we will define a set of _built in_ concepts that have operators and standard functions associated with them.
+
+One example of a built in concept is `Ordered`. 
+
+`Ordered` defines the comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=` and is implemented by 
+string-, floating-point- and integer types.
+
+`Ordered` may be used in a generic function like this:
 
 ```Go
-constraint Integer :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
-                   :int8 || :int16 || :int32 || :int64 || :int
+\T Ordered/ func Min(t1 t2 T) T {
+	if t1 < t2 {
+		return t1 
+	} else {
+		return t2
+	}
+}
+```
 
-constraint Number :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
-                  :int8 || :int16 || :int32 || :int64 || :int || 
-				  :float32 || :float64 || :complex64 || :complex128
+The full list of built-in concepts are:
 
-constraint Addable :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
-                   :int8 || :int16 || :int32 || :int64 || :int || 
-                   :float32 || :float64 || :complex64 || :complex128 || :string
+* `Comparable`
+  * Operators: `==`, `!=`
+  * Built in functions: _none_
+  * Implemented by: _Any comparable type_
+* `Ordered`
+  * Operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+  * Built in functions: _none_
+  * Implemented by: _integer types_, _float types_ and `string`
+* `Addable`
+  * Operators: `+`
+  * Built in functions: _none_
+  * Implemented by: `string`, _number types_
+* `Number`
+  * Operators: `+`, `-`, `*`, `/`
+  * Built in functions: _none_
+  * Implemented by: _number types_
+* `Integer`
+  * Operators: `+`, `-`, `*`, `/`, `<<`, `>>`, `^`, `&`, `|`; 
+  * Built in functions: _none_
+  * Implemented by: _integer types_
+* `Bool` 
+  * Operators: `==`, `!=`, `&&`, `||`, `!`
+  * Built in functions:
+  * Implemented by: 
+  * Note: `Bool` is special in that type parameters implementing `Bool` may be used in conditionals. Eg:
+```Go
+	\B Bool/ func F(b B) {
+		if b {
+			println "It's true"
+		} else {
+			println "It's false"
+		}
+	}
+	```
+* `String` 
+  * Operators: `[]`, `+`, `==`, `!=`, `<`, `>`, `<=`, `>=`
+  * Built in functions: `make`, `len`, `cap`
+  * Implemented by: _string types_
+* `Array\T/` 
+  * Operators: `[]`
+  * Built in functions: `len`, `cap`
+  * Implemented by: _array types containing `T`_
+* `Slice\T/`
+  * Operators: `[]`
+  * Built in functions: `make`, `append`, `len`, `cap`, `copy`
+  * Implemented by: _slice types containing `T`_
+* `Map\K Comparable, V/` 
+  * Operators: `[]`
+  * Built in functions: `make`, `len`, `delete`
+  * Implemented by: _map types keyed by `K`, holding `T`_
+* `RChan\T/`
+  * Operators: `<-` _(read)_
+  * Built in functions: `make`, `close`, `cap`
+  * Implemented by: _read channels of `T`_
+* `WChan\T/`
+  * Operators: `<-` _(write)_
+  * Built in functions: `make`, `close`, `cap`
+  * Implemented by: _write channels of `T`_
+* `Chan\T/`
+  * Operators: `<-` _(read and write)_
+  * Built in functions: `make`, `close`, `cap`
+  * Implemented by: _channels of `T`_
+* `Ptr\T/`
+  * Operators: `*`
+  * Built in functions: _none_
+  * Implemented by: pointer types pointing to `T` 
+
+
+A few clarifications:
  
-constraint Ordered :uint8 || :uint16 || :uint32 || :uint64 || :uint || 
-                   :int8 || :int16 || :int32 || :int64 || :int || 
-				   :float32 || :float64 || :string 
-```
-
-### A note on implementation
-
-The compiler could represent a constraint as 
+* A concept that is implemented by a type T is also implemented by any type that has T as underlying type.  
+  Eg: `type AppleCount int` implements `Integer`, `Number`, `Additive`
+* Some of the built-in concepts have _built-in functions_ associated with them. 
+  For example `Slice` defines the functions `make`, `len` and `cap`, so you can do stuff like:
 
 ```Go
-type Constraint struct {
-	Methods MethodSet
-	Fields  FieldSet
-	Types   TypeSet
-}
-```
-with `MethodSet`, `FieldSet` and `TypeSet` being types suitable for representing 
-sets of methods, fields and types, respectively.
-
-The type `TypeSet` must also be capable of representing 'any underlying type' which 
-we'll denote by the constant `AnyType`, and 'any comparable underlying type' which we'll
-denote by `AnyComparable`.
-
-If `C1`, `C2` are constraints and `C3` is the conjunction of `C1` and `C2` then:
-
-* `C3.Methods` is the union of `C1.Methods` and `C2.Methods`
-* `C3.Fields` is the union of `C1.Fields` and `C2.Fields`
-* `C3.Types` is the intersection of `C1.Types` and `C2.Types`, and specifically:
-	* If `C1.Types` is 'any type' then `C3.Types` is equal to `C2.Types`
-	* If `C1.Types` is 'any comparable type' then `C3.Types` is equal to the subset
-	  of `C2.Types` that are comparable.
-
-A constraint `C` is _unsatisfiable_ if
-
-* `C.Types` is empty
-* `C.Fields` is non-empty and none of the members of `C.Types` has all the fields
-  of 'C.Fields'.   
-  'any type' allways fulfills this condition.  
-  'any comparable type' fulfills it if all members of `C.Fields` are comparable.
-
-If the compiler encounters an unsatisfiable constraint it must emit an error.
-
-A constraint `C2` _implies_ constraint `C1` if
-
-* `C1.Methods` is a subset of `C2.Methods`
-* `C1.Fields` is a subset of `C2.Fields`
-* `C2.Types` is a subset of `C1.Types`
-
-
-## More on generic definitions
-
-Given the description of constraints above, there are a few more points to be made about generics.
-
-### Referring to generic types or functions in a generic definition
-
-Consider:
-
-```Go
-\U Constraint1/ type FooType ...
-
-\U Constraint2/ type BaaType struct {
-	foo FooType\U/
+  \T, S Slice\T/ / func F {
+      var s S = make(S, 0, 0)
+	  ...
 }
 ```
 
-For the second declaration to be valid, `U` must satisfy `Constraint1`, and the compiler must verify that.
-In this case the compiler shall check that `Constraint2` implies `Constraint1`.
+  This constitutes a way of hooking up generics and Concepts with the generics that is built into Go today.
 
-### Overloading generic definitions
+You could say that some of the built-in concepts embeds one another: For example the concept 'Integer' embeds the concept 'Number', 
+but since these concepts are to be built-in, and not defined in explicit go-source, that is of minor importance.
+
+## Interfaces as concepts
+
+An interface may be used in place of a concept. Example:
+
+```Go
+type Stringer interface {
+	String() 
+}
+
+\T Stringer/
+PrintableVector []T
+```
+
+## Overloading generic definitions
 
 Overloading of generic definitions with the _same_ number of type parameters is _not_ allowed: 
 
 ```Go
-\T Constraint1/ type Foo ... 
+\T Concept1/ type Foo ... 
                           
-\T Constraint2/ type Foo ... // Not allowed
+\T Concept2/ type Foo ... // Not allowed
 ```
 
-The problem would be that if `Baa` satisfies both `Constraint1` and `Constraint2`, then `Foo\Baa/` would be ambigous with
+The problem would be that if `Baa` implements both `Concept1` and `Concept2`, then `Foo\Baa/` would be ambigous with
 respect to which definition to employ.
 
 Overloading with _different_ number of generic parameters _is_ allowed.
 So:
+
 ```Go
-\S Constraint1/ type Foo ...
-\T Constraint2, U Constraint3/ type Foo ...
+\S Concept1/ type Foo ...
+\T Concept2, U Concept3/ type Foo ...
 ```
+
 is ok.
 
-### Type methods
+## Type methods
 
 Generic types can have methods:
 
@@ -378,20 +364,20 @@ Generic types can have methods:
 }
 
 The target type must have the same number of type parameters as in the definition of the type.
-And each of the type parameters must be declared to satisfy the same constraint (if any) as in the definition of the type.
+And each of the type parameters must be declared to implement the same concept (if any) as in the definition of the type.
 
 Hence this is not allowed:
 
 ```Go
-\T Constraint1/ type Foo ...
+\T Concept1/ type Foo ...
 
-\T Constraint2/ func (f Foo\T/) M() {
+\T Concept2/ func (f Foo\T/) M() {
 }
 ```
 
-when `Constraint1` is different from `Constraint2`
+Not even if Concept2 is equivalent to Concept1 or embeds Concept1. 
 
-### Runtime
+## Runtime
 
 Concrete instantions of generic types and functions should look like ordinary hand coded ones. Given:
 
@@ -399,7 +385,7 @@ Concrete instantions of generic types and functions should look like ordinary ha
 ```Go
 \Foo C/ MyType ...
 
-type Baa ... // Satisfies C
+type Baa ... // Implements C
 ```
 
 you can cast:
@@ -412,11 +398,28 @@ The instantiation `MyType\Baa/` is a concrete type just like any other (non-gene
 In fact, from a runtime perspective, the only thing that gives away it's origin in a generic definition is
 the appearence of `\` and `/` in it's name.
 
+Concepts have no presence at runtime. 
+It is not possible to cast to concepts, declare variables to instantiate concepts or to use reflection to query about concepts.
+
 
 ## Further considerations
 
-Whats written above constitutes my proposal for generics with constraints in Go. 
+Whats written above constitutes my proposal for concepts in Go. 
 Here I'll mention some variations and additions that could be considered.
+
+### Extending interfaces rather than introducing concepts
+
+Instead of introducing `concept` as a new language construct, one could extend interfaces to specify fields, 
+and add built-in interfaces, as we did with concepts above.
+
+This would have the distinct advantage of not burdening the Go language with a new construct. 
+I have not taken that route for 2 reasons:
+
+* 	Concepts and interfaces may share syntax, but they _are_ different. 
+	A concept exists only at compile time, whereas an interface is represented at runtime as a pointer with type info.
+*	It is, to me at least, not entirely clear that interfaces can be extended without any negative effect 
+	on compile- and runtime performance for existing interface usage. We should strive for 'no play, no pay' when
+	introducing generics in Go.
 
 ### Specialization 
 
@@ -452,10 +455,12 @@ It would be nice to extend this function to types that are not `Ordered`, but ha
 ```
 
 We can't have these two definitions at the same time as overloading is not allowed. 
-One could consider a _generic switch_:
+One could consider some form of static type switch:
 
 ```Go
 \T/ func Max(t1, t2 T) T {
+	var t1_less_than_t2 bool
+	
 	switch\T/ {
 	case Ordered:
 		if t1 < t2 {
@@ -463,20 +468,19 @@ One could consider a _generic switch_:
 		} else {
 			return t1
 		}
-	case .LessThan(T) bool: 
+	case Lessable: 
 		if t1.LessThan(t2) {
 			return t2
 		} else {
 			return t1
 		}
 	}
-}
 ```
 
 The idea would be:
 
 *   The compiler (still) verifies the correctness of this code at the point of definition.
-*   On instantiation apply the first switch case that matches (ie. `T` implements the constraint).
+*   On instantiation apply the first switch case that matches (ie. `T` implements the concept).
 *   If no case matches, the compiler issues a compile error, something like "Type must implement one of `Ordered`, `Lessable`."
 *   A `default` entry is allowed, so that all types can be handled in one switch.    
     
@@ -486,13 +490,14 @@ I'm not convinced that it's usefulness is broad enough to warrant its addition t
 
 I feel the subject is complicated enough that it should be considered separately.
 
+TODO: Variadic templates.
 
 ### Variadic definitions
 
 Another element left out of this proposal is _variadic definitions_. Something like:
 
 ```Go
-\T...Constraint/ type ?? 
+\T...Concept/ type ?? 
 ```
 
 I've put a couple of question marks here, because it is unclear, to me at least, how to write an actual definition
@@ -515,4 +520,28 @@ etc.
 So if you want to do tuples, you can define them and accompanying functions/methods up to, say, 20 elements covering most usecases. 
 It will involve some writing, but once done, from a usage perspective about just as useful as if it had been defined with
 variadic generics. Go gen may be helpful. All in all I do not think omission of variadic definitions is a major problem.
+
+### Combining concepts 'on the fly'
+
+One element of Java generics I like is:
+
+```Java 
+public class C<T extends I1 & I2> {
+	...
+}
+```
+
+Here you combine interfaces 'on the fly', not having to define a new one extending `I1` and `I2`. 
+
+It could be considered to add something like this to Go concepts, maybe:
+
+```Go
+\T C1:C2/ type ...
+```
+
+meaning T should implement both `C1` and `C2`. 
+
+I have opted not to do so, since I feel that the behaviour of concepts and interfaces should be as closely aligned as possible.
+In other words: If this should be added to concepts it should also be added to interfaces. That would be a separate proposal.
+
 
