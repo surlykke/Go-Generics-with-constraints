@@ -1,5 +1,4 @@
-_Note: This project serves as a placeholder.
-Once it is done I hope to have it added to [Go Proposals](https://github.com/golang/proposal).
+_Note: This project serves as a placeholder.  Once it is done I hope to have it added to [Go Proposals](https://github.com/golang/proposal).
 If that happens this project will be deleted_
 
 # Generics with constraints for Go
@@ -61,17 +60,17 @@ That means they may depend on type parameters.
 Here's an example of a generic type `List` of `T` where `T` is a type parameter:
 
 ```Go
-\T/ type List struct {
+type [T] List struct {
 	value T
-	next *List\T/
+	next *List[T]
 }
 ```
 
 We may also define a generic function:
 
 ```Go
-\T/ func Push(l *List\T/, t T) *List\T/{
-	return &List\T/{t, l}
+func [T] Push(l *List[T], t T) *List[T]{
+	return &List[T]{t, l}
 }
 ```
 
@@ -82,10 +81,10 @@ we can't make any assumptions about what can be done with it.
 We can use our generic definition like this:
 
 ```Go
-var myList *List\int/ = nil
+var myList *List[int] = nil
 
-myList = Push\int/(&myList, 2)
-myList = Push\int/(&myList, 4)
+myList = Push[int](&myList, 2)
+myList = Push[int](&myList, 4)
 
 for l := &myList; l != null; l = l.next {
 	fmt.Println(l.value)
@@ -94,34 +93,12 @@ for l := &myList; l != null; l = l.next {
 
 ### A note about the syntax
 
-As you can see the syntax I use for generic differs somewhat from what Taylor has proposed.
+I follow the syntax proposed by Taylor, except that I don't use type deduction. 
+I prefer to state explicitly the value of type parameters, and it seems to me that type deduction is 
+a form of overloading. Something which was deliberately left out of Go 1.
 
-`\` and `/` are used as delimiters. I prefer not to overload  `[]` or `()` with a new usage, and I prefer
-`MyFunc\Foo/(f)` to `MyFunc(Foo)(f)`.
-
-Also, I prefer to have the type parameter list _before_ keywords `type` and `func` in declarations. 
-This, I feel, makes generic definition 'stand out' more.
-
-To my knowledge, there is no other legal use of backslash in Go outside strings and runes. 
-Hence there is no need for a keyword, like `template` or `gen`, to mark the start of a generic declaration. 
-`\` will serve that purpose.
-
-The main drawback is that if you nest: `Foo\Baa\T//` the last pair of forward slashes will be interpreted 
-as starting a line comment. 
-You'll have to insert a space: `Foo\Baa\T/ /`, or perhaps slightly nicer: `Foo\ Baa\T/ /`.
-
-This is reminiscent of the `>>` issue in C++ template programming so you could view it as a (weird) homage to C++. 
-In my mind it's not a huge problem. 
-
-Another note: I'm not including type deduction in this proposal. 
-I prefer to state explicitly the value of type parameters, and I prefer to think of `Push\int/(l, 2)` 
-as a call to a _distinct_ function with the _name_ `Push\int/` rather than a call to a function `Push` 
-with a type parameter `int`.
-
-I would like to point out, though, that neither the choice of delimiters nor the absence of type deduction 
-are essential to this proposal. 
-It could easily be rewritten to use another pair of delimiters and type deduction could be added. 
-Both, I guess, at the cost of some increase in compiler complexity.
+This is a minor point, though.
+One could add type deduction to this proposal at the cost, I guess, of some increase in compiler complexity.
 
 ## Constraints
 
@@ -151,7 +128,7 @@ Here `constraint` is a new keyword which marks the start of a constraint declara
 We can use `Loggable` in a generic declaration:
 
 ```Go
-\T Loggable/ func DoLog(t T) {
+func [T Loggable] DoLog(t T) {
 	T.Log() // Allowed because T is constrained to be a type that has method Log()
 }
 ```
@@ -171,7 +148,7 @@ It would be satisfied by any type having a field name `Id` of type `uint64`
 An example use could be:
 
 ```Go
-\E Entity/ func Equal(e1, e2 E) bool {
+func [E Entity] Equal(e1, e2 E) bool {
 	return e1.Id == e2.Id
 }
 ```
@@ -194,11 +171,11 @@ Names may not be reused.
 Constraints may be generic:
 
 ```Go
-\T/ constraint Cloneable {
+constraint [T] Cloneable {
 	Clone() T
 }
 
-\T Cloneable\T/ / func copy(t T) {
+func [T Cloneable[T]] copy(t T) {
 	return t.Clone()
 }
 ```
@@ -213,19 +190,19 @@ constraint PositiveInt {
 }
 ```
 
-Types having one of the unsigned int types as underlying type satisfy this constraint.
+A type must have one of `uint8`, `uint16`, `uint32`, `uint64` _or_ `uint` as underlying type to satisfy this constraint.
 
 The format of an underlying type specification is a line starting with `:` followed by a
 comma separated list of types. 
 
 A constraint declaration may have _at most_ one underlying type specification.
 
+Absense of an underlying type specification means that any underlying type is allowed.
+
 Underlying type may be one of Go's predeclared boolean, string, numeric or string types, 
 or it may be a struct, slice, channel, array, pointer or function type.
 
-
 A couple of examples:
-
 
 ```Go
 constraint SliceOfInt {
@@ -237,7 +214,7 @@ A generic variant:
 
 
 ```Go
-\T/ constraint Slicy {
+constraint [T] Slicy {
 	[]T
 }
 ```
@@ -253,7 +230,7 @@ constraint PointerToInt {
 A generic pointer constraint
 
 ```Go
-\T/ Pointer {
+constraint [T] Pointer {
 	:*T
 }
 ```
@@ -275,7 +252,7 @@ To satisfy constraint `Comparable` a type must be just that - comparable, ie. ha
 `Comparable` might be used like this:
 
 ```Go
-\K Comparable, V/ type Map\K,V/ [K]V
+type [K Comparable, V] Map [K]V
 ```
 The second is _array_, denoted by [#]<type>. 
 To declare that the underlying type must be an array of uin32, you'd write:
@@ -308,12 +285,27 @@ type Baa constraint {
 whereby `Baa` gets all methods, fields of `Foo`. 
 
 There is no 'overriding', which means:
+
 * The name of a field or method on `Baa` may not be the same as a name of a field or method on `Foo`
 * Having a list of underlying types both in `Foo` and `Baa` is an error.
+### Comparing constraints
+
+Constraints are comparable. Two constraints are equivalent if and only if
+
+* They have the same set of methods.
+* They have the same set of fields.
+* They allow the same underlying types.
+
+Constraints are partially ordered by a relation 'implies'.
+Constraint `C1` implies constraint `C2` if and only if:
+
+* Every method on `C2` is a method on `C1`
+* Every field on `C2` is a field on `C1`
+* Every underlying type allowed by `C1` is allowed by `C2`
 
 ### Standard constraints
 
-A number of constraints will be so common that they could be included in Go's standard library. These include:
+A number of constraints will be so common that they should be included in Go's standard library. These include:
 
 ```Go
 constraint Addable { 
@@ -347,8 +339,6 @@ constraint Ordered {
 This concludes our description of constraints. Now we'll turn back our attention to generics.
 
 
-
-
 ## More on generics
 
 ### Type methods
@@ -356,9 +346,9 @@ This concludes our description of constraints. Now we'll turn back our attention
 Generic types can have methods:
 
 ```Go
-\T C1/ type Foo ...
+type [T C1] Foo ...
 
-\T C1/ func (f Foo\T/) M() {
+func [T C1] (f Foo[T]) M() {
 
 }
 ```
@@ -366,16 +356,16 @@ Generic types can have methods:
 The target type must have the same number of type parameters as in the definition of the type.
 And each of the type parameters must be declared to implement the same constraint (if any) as in the definition of the type.
 
-Hence this is allowed:
+Hence this 
 
 ```Go
-\T Constraint1/ type Foo ...
+type [T Constraint1] Foo ...
 
-\T Constraint2/ func (f Foo\T/) M() {
+func [T Constraint2] (f Foo[T]) M() {
 }
 ```
 
-only if Constraint2 is equal to Constraint1.
+is allowed only if Constraint2 is equal to Constraint1.
 
 
 ### Overloading generic definitions
@@ -383,24 +373,23 @@ only if Constraint2 is equal to Constraint1.
 Overloading of generic definitions with the _same_ number of type parameters is _not_ allowed: 
 
 ```Go
-\T Constraint1/ type Foo ... 
+type [T Constraint1] Foo ... 
                           
-\T Constraint2/ type Foo ... // Not allowed
+type [T Constraint2] Foo ... // Not allowed
 ```
 
-The problem would be that if `Baa` implements both `Constraint1` and `Constraint2`, then `Foo\Baa/` would be ambigous with
+The problem would be that if `Baa` implements both `Constraint1` and `Constraint2`, then `Foo[Baa]` would be ambigous with
 respect to which definition to employ.
 
 Overloading with _different_ number of generic parameters _is_ allowed.
 So:
 
 ```Go
-\S Constraint1/ type Foo ...
-\T Constraint2, U Constraint3/ type Foo ...
+type [S Constraint1] Foo ...
+type [T Constraint2, U Constraint3] Foo ...
 ```
 
 is ok.
-
 
 ### Runtime
 
@@ -408,21 +397,22 @@ Concrete instantions of generic types and functions should look like ordinary ha
 
 
 ```Go
-\T/ MyType ...
+type [T] MyType ...
 ```
 
-and a concrete instatiation, say `MyType\int/`, you can do casts, just like with non-generic types:
+and a concrete instatiation, say `MyType[int]`, you can do casts, just like with non-generic types:
 
 ```Go
-.(MyType\int/)
+.(MyType[int])
 ```
 
-The instantiation `MyType\int/` is a concrete type just like any other (non-generic) type in Go. 
+The instantiation `MyType[int]` is a concrete type just like any other (non-generic) type in Go. 
 In fact, from a runtime perspective, the only thing that gives away it's origin in a generic definition is
-the appearence of `\` and `/` in it's name.
+the appearence of `[` and `]` in it's name.
 
 Constraints have no presence at runtime. 
-It is not possible to cast to constraints, declare variables to instantiate constraints or to use reflection to query about constraints.
+It is not possible to cast to constraints, declare variables to instantiate constraints or to use reflection 
+to query about constraints.
 
 ## Examples
 
@@ -434,7 +424,7 @@ Typesafe fruit-count comparison could be done like:
 
 constraint PositiveInt { :uint8, uint16, uint32, uint64, uint }
 
-\Counter PositiveInt/ Compare(c1, c2 Counter) int {
+func [Counter PositiveInt] Compare(c1, c2 Counter) int {
 	if c1 < c2 {           // We know all possible underlying types of Counter support '<'
 		return -1
 	} else if c1 == c2 {   // - and are comparable
@@ -450,8 +440,8 @@ type OrangeCount uint32
 var apples1, apples2 Applecount = 3,4
 var oranges1, oranges2 OrangeCount = 7,6
 
-Compare\Applecount/(apples1, apples2) // Yields 1
-Compare\Orangecount/(oranges1, oranges2) // Yields -1
+Compare[Applecount](apples1, apples2)    // Yields 1
+Compare[Orangecount](oranges1, oranges2) // Yields -1
 
 ```
 
@@ -467,7 +457,7 @@ constraint ByteSequence {
 	:[]byte, string
 }
 
-\T ByteSequence /func Join(a []T, sep T) T {
+[T ByteSequence ]func Join(a []T, sep T) T {
 	if len(a) == 0 {
 		return []T{}
 	}
@@ -497,12 +487,12 @@ In a section about
 [type checking](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md#type-checking), 
 Taylor offers a list of restrictions that the compile might extract from generic declarations. In short form these are:
 
-* addable
-* integral
-* numeric
-* boolean
-* comparable
-* ordered
+* addable: _Underlying type is `string` or a number type_ 
+* integral: _??_ 
+* numeric: _??_
+* boolean: _Underlying type is `bool`_
+* comparable: _Underlying type is a comparable type_
+* ordered: _Underlying type is `string` or a non-complex number type_
 * callable
 * composite
 * points to type U
@@ -528,7 +518,7 @@ constraint CallableWithIntAndFloat {
 	:func(i int, f float) 
 }
 
-\F CanCallWithIntAndFloat/ func Caller(f F) {
+func [F CanCallWithIntAndFloat] Caller(f F) {
 	f(3, 7.3)
 }
 ```
@@ -551,7 +541,7 @@ With these, one can determine assignability and convertability based on what und
 ## Further considerations
 
 Whats written above constitutes my proposal for constraints in Go. 
-Here I'll mention some variations and additions that could be considered.
+Now I'll mention some variations and additions that could be considered.
 
 ### Specialization 
 
@@ -565,7 +555,7 @@ point of instantiation which one 'works'. This is obviously at odds with the goa
 On the other hand some kind of conditional behaviour for generic definitions could be beneficial. Consider the `Max` function:
 
 ```Go
-\T Ordered/ func Max(t1,t2 T) T {
+func [T Ordered] Max(t1,t2 T) T {
 	if t1 < t2 {
 		return t2
 	} else {
@@ -577,9 +567,11 @@ On the other hand some kind of conditional behaviour for generic definitions cou
 It would be nice to extend this function to types that are not ordered, but have a method `LessThan`:
 
 ```Go
-\T/ constraint Lessable { .LessThan(T) bool }
+constraint [T] Lessable { 
+	LessThan(T) bool 
+}
 
-\T Lessable/ func Max(t1, t2 T) T {
+func [T Lessable] Max(t1, t2 T) T {
 	if t1.LessThan(t2) {
 		return t2
 	} else {
@@ -592,8 +584,8 @@ We can't have these two definitions at the same time as overloading is not allow
 One could consider some form of _static switch_:
 
 ```Go
-\T/ func Max(t1, t2 T) T {
-	switch\T/ {
+func [T] Max(t1, t2 T) T {
+	switch[T] {
 	case Ordered:
 		if t1 < t2 {
 			return t2
@@ -613,12 +605,14 @@ The idea would be:
 
 * The compiler (still) verifies the correctness of this code at the point of definition. 
 * On instantiation apply the first switch case that matches (ie. `T` satisfies the constraint).
-* If no case matches, the compiler issues a compile error, something like "Type must implement one of `Ordered`, `Lessable`."
+* If no case matches, the compiler issues a compile error, 
+  in this case something like "Type must implement one of `Ordered`, `Lessable`."
 * A `default` entry is allowed, so that all types can be handled in one switch.    
     
 I have not included type switch in this proposal.
 While this construct works nicely for the `Max` example, 
 I'm not convinced that it's usefulness is broad enough to warrant its addition to Go. 
+Also I'm not sure about the syntax.
 
 I feel the subject is complicated enough that it should be considered separately.
 
@@ -627,28 +621,31 @@ I feel the subject is complicated enough that it should be considered separately
 Another element left out of this proposal is _variadic definitions_. Something like:
 
 ```Go
-\T...Constraint/ type ?? 
+type [T...Constraint] MyVaridicType ?? 
 ```
 
-I've put a couple of question marks here, because it is unclear, to me at least, how to write an actual definition
-based on a variable number of type parameters. C++ uses recursion which in turn relies on overload, and that is not a good 
-fit for Go. I think you'd have to add a number of primitives to Go including:
+This would introduce a variable number of type parameters all bound by `Constraint`.
 
-*	A way of getting the number of type parameters at intantiation time
-*   A way of addressing the n'th type parameter 
-*  	A way of packing a list of variables into a struct and a way of 'spreading' a struct to a list of variables
+I've put in a couple of question marks because it is unclear, to me at least, how to write an actual definition
+based on a variable number of type parameters. 
+C++ uses recursion which in turn relies on overload, and that is not a good fit for Go. 
+I think one would have to add a number of primitives to Go including:
 
-I don't think variadics is useful enough to warrant addition of these constructs.
+* A way of getting the number of type parameters at intantiation time
+* A way of addressing the n'th type parameter 
+* A way of packing a list of variables into a struct and a way of 'spreading' a struct to a list of variables
+
+I don't think variadics is useful enough to warrant addition of such complexity.
 
 Overloading with respect to number of type parametes _is_ allowed so it is possible to do:
 
 ```Go
-\T1/ type tuple struct { t1 T1 }
-\T1, T2/ type tuple struct { t1 T1, t2 T2 }
-\T1, T2, T3/ type tuple struct { t1 T1, t2 T2, t3 T3 }
+type [T1] tuple struct { t1 T1 }
+type [T1, T2] tuple struct { t1 T1, t2 T2 }
+type [T1, T2, T3] tuple struct { t1 T1, t2 T2, t3 T3 }
 ```
-
 etc. 
+
 So if you want to do tuples, you can define them and accompanying functions/methods up to, say, 20 elements covering most usecases. 
 It will involve some writing, but once done, from a usage perspective about just as useful as if it had been defined with
 variadic generics. Go gen may be helpful. All in all I do not think omission of variadic definitions is a major problem.
@@ -685,7 +682,8 @@ C++ concepts describe traits that a type parameter may be required to have,
 and they would be checked at the point of instantiation, to allow the compiler to issue simpler warnings. 
 
 C++ concepts are a lot more complicated than the constraint system I've described here. 
-One reason is that Go's type system is much simpler. As an example, consider this:
+
+One reason is that Go's type system is much simpler. Consider:
 
 ```Go
 a < b
@@ -707,7 +705,7 @@ in the sense that it would not alter the meaning or validity of any program vali
 
 One could make it fully backward compatible by replacing `constraint` with some, today, nonlegal sequence of characters.
 
-I have no strong preferences regarding this. I've used `constraint` here as it represents the underlying idea most clearly.
+I have no strong preferences regarding this. I've used `constraint` here as it conveys the underlying idea most clearly.
 
 ## Summary
 
