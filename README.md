@@ -4,7 +4,7 @@ If that happens this project will be deleted_
 # Generics with constraints for Go
 
 This is a proposal for adding generics with constraints to the Go language. 
-It is written by Christian Surlykke, fall of 2017.
+It is written by Christian Surlykke, fall of 2017, winter 2017/2018.
 
 There have been lots of discussion on how generics in Go could look. 
 In particular Ian Lance Taylor have written detailed proposals
@@ -17,8 +17,12 @@ outlining how to add generics to Go.
 
 Most of the discussion has taken place in issue [15292](https://github.com/golang/go/issues/15292).
 
-In [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
-Taylor describes an implementation, where the compiler would analyze a generic definition and extract _restrictions_ from it.
+A few places in the early proposals Taylor mentions _concepts_: 
+Ways of restricting what concrete types may be used in place of type parameters on instantiation.
+
+Later Taylor seems to abandon this, and in 
+[Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
+Taylor describes an implementation, where the compiler would analyze a generic definition and _extract_ restrictions from it.
 
 For example, given a generic definition:
 ```Go
@@ -29,13 +33,10 @@ func [T] Add(x1,x2 T) T {
 A compiler should extract the restriction 'addable' - that a concrete type substituted for `T` must support the addition operator, 
 and the compiler would use that knowledge in checking the validity of concrete instantiations of `Add`.
 
-What I want to do here is develop an alternative to that: Rather than having the compiler extract restrictions, 
-put the onus on the developer to declare these restrictions _explicitly_.
+What I want to do here is develop an alternative to that: 
+Rather than having the compiler extract restrictions, put the onus on the developer to declare these restrictions _explicitly_.
 
 So I propose generics for Go with _constraints_:
-
-Generics means that types and functions may be _parametrized_, ie. depend on type parameters. 
-They may be instantiated with _concrete types_ substituted for the type parameters.
 
 Constraints means that a generic declaration may restrict what concrete types can be substituted for 
 a type parameter. 
@@ -52,12 +53,14 @@ I believe that with this, the compiler can be made simpler, the code will be mor
 
 ## Generics
 
-Before moving on to constraints, lets briefly look at generics.
+Before moving on to constraints, lets briefly lay out how generics looks according to Taylors proposal.
 
 Type- and function definitions at package level may be generic. 
 That means they may depend on type parameters. 
 
-Here's an example of a generic type `List` of `T` where `T` is a type parameter:
+Here's an example, from 
+[Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md), 
+of a generic type `List` of `T` where `T` is a type parameter:
 
 ```Go
 type [T] List struct {
@@ -118,8 +121,8 @@ Let's say we want to ensure a type has the a method `Log()`.
 We could then define a constraint like this:
 
 ```Go
-constraint Loggable { 
-	Log()
+constraint Loggable T{ 
+	T.Log()
 }
 ```
 
