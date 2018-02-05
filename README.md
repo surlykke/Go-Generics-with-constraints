@@ -21,14 +21,14 @@ outlining how to add generics to Go.
 Most of the discussion has taken place in issue 
 [15292](https://github.com/golang/go/issues/15292).
 
-A few places in the early proposals Taylor mentions _concepts_: 
+A few places Taylor mentions _concepts_: 
 Ways of restricting what concrete types may be used in place of type parameters 
 on instantiation.
 
-Later Taylor seems to abandon this, and in 
+In 
 [Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
-Taylor describes an implementation, where the compiler would analyze a generic 
-definition and _extract_ restrictions from it.
+Taylor abandons this in favour of having the compiler the compiler _extract_ 
+restrictions from definitions.
 
 For example, given a generic definition:
 ```Go
@@ -36,7 +36,7 @@ func [T] Add(x1,x2 T) T {
 	return x1 + x2 + x3
 }
 ```
-A compiler should extract the restriction 'addable' - that a concrete type 
+a compiler would extract the restriction 'addable' - that a concrete type 
 substituted for `T` must support the addition operator, 
 and the compiler would use that knowledge in checking the validity of concrete 
 instantiations of `Add`.
@@ -52,12 +52,10 @@ Constraints serve a double purpose:
 
 1.  They _limit_ what concrete types may be substituted for a type parameter 
     when instantiating a genering definition.
-1.  Through that limitation you define _what you can do_ with a type parameter 
-    in a generic definition. 
-	Eg. if you want to call a method on a type parameter, the parameter must be 
-	constrained so that _all_ allowed concrete types have that method.
-	If you want to apply an operator to a type parameter, the parameter must be
-	constrained so that all allowed types support that operator etc.
+1.  By that limitation they define _what you can do_ with a type parameter 
+    in a generic definition. Eg. an operator can only be applied to a type 
+	parameter, if the parameter is constrained so that _all_ allowed types 
+	support that operator.
 
 The aim is that the correctness of a generic definition can be verified at the 
 point of _definition_:  
@@ -137,22 +135,26 @@ Let's say we want to ensure a type has the a method `Log()`.
 We could then define a constraint like this:
 
 ```Go
-constraint Loggable T{ 
-	T.Log()
+constraint Loggable { 
+	Log()
 }
 ```
 
 Here `constraint` is a new keyword which marks the start of a constraint 
 declaration.
 
+This declaration defines the constraint `Loggable`. To fulfill `Loggable` a 
+type must have a method `Log()`.
+
 We can use `Loggable` in a generic declaration:
 
 ```Go
 func [T Loggable] DoLog(t T) {
-	T.Log() // Allowed because T is constrained to be a 
-	        // type that has method Log()
+	T.Log() // Allowed because T is constrained by Loggable 
 }
 ```
+
+As long as we deal with methods only, constraints look a lot like interfaces.
 
 ### Fields
 
@@ -164,7 +166,8 @@ constraint Entity {
 }
 ```
 
-It would be satisfied by any type having a field named `Id` of type `uint64`
+It would be satisfied by any type having a field named `Id` of type `uint64`.
+Obviously this means that the type is a struct of sorts.
 
 An example use could be:
 
@@ -203,7 +206,8 @@ func [T Cloneable[T]] copy(t T) {
 
 ### Underlying types
 
-A constraint may limit what underlying types a type can have. An example
+A constraint may limit what underlying types a type can have. 
+An example
 
 ```Go
 constraint PositiveInt {
@@ -212,85 +216,37 @@ constraint PositiveInt {
 ```
 
 A type must have one of `uint8`, `uint16`, `uint32`, `uint64` _or_ `uint` as 
-underlying type to satisfy this constraint.
+its underlying type to satisfy this constraint.
 
-The format of an underlying type specification is a line starting with `:` 
-followed by a comma separated list of types. 
+The format of a declaration of underlying types is a line starting with `:` 
+followed by a comma separated list of the allowed types. 
 
-A constraint declaration may have _at most_ one underlying type specification.
+A constraint may declare _at most_ one set of underlying types.
 
-Absense of an underlying type specification means that any underlying type is 
+Absence of an underlying type declaration means that any underlying type is 
 allowed.
 
 Underlying type may be one of Go's predeclared boolean, string, numeric or 
 string types, or it may be a struct, slice, channel, array, pointer or 
 function type.
 
-A couple of examples:
+### Arrays
 
-```Go
-constraint SliceOfInt {
-	[]int
+Constaints described so far allow specifying that the underlying type should 
+be an array, eg:
+
+```
+constraint[T] ArrayOf5 {
+	:[5]T
 }
 ```
 
-A generic variant: 
+This is not very flexible, as it doesn't allow abstraction with respect to 
+array length, so as a special case we allow wildcard for that, using the 
+character `#`. 
 
-```Go
-constraint [T] Slicy {
-	[]T
-}
-```
-
-Pointers:
-
-```Go
-constraint PointerToInt {
-	:*int
-}
-```
-
-A generic pointer constraint
-
-```Go
-constraint [T] Pointer {
-	:*T
-}
-
-```
-
-Channels:
-
-```Go
-constraint [T] Channel {
-	:chan T
-}
-```
-
-
-#### Pseudo types
-
-There are a couple of sets of types that cannot be described by what has been 
-introduced so far. 
-To remedy that we introduce a couple of _pseudo type_ for use in constraints.
-
-The first is _comparable_, denoted `==`. It is used like this:
-
-```Go
-constraint Comparable {
-	:==
-}
-```
-To satisfy constraint `Comparable` a type must be just that - comparable, ie. 
-have a comparable underlying type.
-
-`Comparable` might be used like this:
-
-```Go
-type [K Comparable, V] Map [K]V
-```
-The second is _array_, denoted by [#]<type>. 
-To declare that the underlying type must be an array of uin32, you'd write:
+For example to  declare that the underlying type must be an array of uin32, 
+you'd write:
 
 ```Go
 constraint Uint32Array {
@@ -298,19 +254,36 @@ constraint Uint32Array {
 }
 ```
 
-We will not offer a way to specify the length of the array.
+A generic variant:
 
+```
+constraint[T] Array {
+	:[#]T
+}
+```
+
+
+### Comparable
+
+There will be _one_ built in constraint: `Comparable`. To satisfy `Comparable`
+a type must be just that - comparable, ie. have a comparable underlying type.
+
+`Comparable` might be used like this:
+
+```Go
+type [K Comparable, V] Map [K]V
+```
 
 ### Embedding 
 
 Just like interfaces, a constraint can _embed_ an other constraint
 
 ```Go
-type Foo constraint {
+constraint Foo {
 	...
 }
 
-type Baa constraint {
+constraint Baa {
 	Foo
 	...
 }
@@ -324,10 +297,13 @@ There is no 'overriding', which means:
 * The name of a field or method on `Baa` may not be the same as a name of a 
   field or method on `Foo`
 * Having a list of underlying types both in `Foo` and `Baa` is an error.
+* If a constraint embeds `Comparable` it cannot explicitly define a  list of 
+  underlying types
 
 ### Comparing constraints
 
-Constraints are comparable. Two constraints are equivalent if and only if
+Constraints are comparable. 
+Two constraints are equivalent if and only if
 
 * They have the same set of methods.
 * They have the same set of fields.
@@ -343,7 +319,8 @@ Constraint `C1` implies constraint `C2` if and only if:
 ### Standard constraints
 
 A number of constraints will be so common that they should be included in Go's 
-standard library. These include:
+standard library. 
+These include:
 
 ```Go
 constraint Addable { 
@@ -380,7 +357,8 @@ Constraints have no presence at runtime.
 It is not possible to cast to constraints, declare variables to instantiate 
 constraints or to use reflection to query about constraints.
 
-This concludes our description of constraints. Now we'll turn back to generics.
+This concludes our description of constraints. 
+Now we'll turn back to generics.
 
 
 ## More on generics
@@ -680,9 +658,10 @@ separately.
 
 ## Comparison with other languages
 
-Here I'll make a brief comparison with Java and C++. I can't offer thoughts on 
-any other language as Java and C++ are the only statically typed languages 
-with generics that I have any substantial experience with. 
+Here I'll make a brief comparison with Java and C++. 
+I can't offer thoughts on any other language as Java and C++ are the only 
+statically typed languages with generics that I have any substantial 
+experience with. 
 
 ### Java
 
@@ -761,8 +740,8 @@ compiler can check at the point of declaration, is the best way to implement
 generics in Go.
 
 This proposal is the best idea for type safe generics I've been able to come 
-up with. Surely others can come up with something better, perhaps inspired by 
-this.
+up with. 
+Surely others can come up with something better, perhaps inspired by this.
 
 
 
