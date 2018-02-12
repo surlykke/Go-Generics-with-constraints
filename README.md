@@ -276,7 +276,7 @@ type [K Comparable, V] Map [K]V
 
 ### Embedding 
 
-Just like interfaces, a constraint can _embed_ an other constraint
+Analogously to interfaces, a constraint can _embed_ another constraint
 
 ```Go
 constraint Foo {
@@ -297,8 +297,8 @@ There is no 'overriding', which means:
 * The name of a field or method on `Baa` may not be the same as a name of a 
   field or method on `Foo`
 * Having a list of underlying types both in `Foo` and `Baa` is an error.
-* If a constraint embeds `Comparable` it cannot explicitly define a  list of 
-  underlying types
+* If a constraint embeds `Comparable` (directly or indirectly) it cannot 
+  explicitly define a  list of underlying types
 
 ### Comparing constraints
 
@@ -391,7 +391,6 @@ func [T Constraint2] (f Foo[T]) M() {
 
 is allowed only if Constraint2 is _equal_ to Constraint1.
 
-
 ### Overloading generic definitions
 
 Overloading of generic definitions with the _same_ number of type parameters is 
@@ -450,17 +449,52 @@ Compare[Orangecount](oranges1, oranges2) // Yields -1
 
 With no way to compare apples and oranges.
 
-### A generic factory
+### Generic singleton factory
 
 ```
-func[T] factory() T {
-	t T
-	intf interface{}
-	intf = t
+constraint Initializable {
+	Initialize()
+}
 
-FIXME
+func[T] TypeOf() Type {
+	var t T
+	return reflect.TypeOf(t);
+}
+
+var repository [Type]interface{}
+
+func[T Initializable] Factory() *T {
+	var typeOfT = TypeOf[T]()
+
+	if _, ok := repository[typeOfT]; !ok {
+		var t T
+		(&t).Initialize();
+		repository[typeOfT] = &t
+	}
+
+	return repository[typeOfT].(*T)
+}
+
+```
+which might be used as:
+
+```Go
+type MyStruct struct {
+	....
+}
+
+func (ms *MyStruct) Initialize() {
+	...
+}
+
+
+var myStruct = Singleton[MyStruct]();
 ```
 
+
+The function `TypeOf` is executed at runtime invoking reflection. One might
+consider adding a built-in function TypeOf which could be executed at compile
+time (instatiation time, that is).
 
 
 ### Joining sequences
@@ -507,31 +541,35 @@ Taylor offers a list of restrictions that the compile might extract from
 generic declarations. 
 In short form these are:
 
-* addable: _Underlying type is `string` or a number type_ 
-* integral: _??_ 
-* numeric: _??_
+Many of those translate straight forward to constraints:
+
+* addable: _As `Addable` above_
+* integral: _As `Integer` above_
+* numeric: _As `Arithmetic` above_
 * boolean: _Underlying type is `bool`_
 * comparable: _Underlying type is a comparable type_
 * ordered: _Underlying type is `string` or a non-complex number type_
-* callable: _See below_
-* composite: 
+* composite: _Type is constrained to have a field or underlying type is a 
+            struct_
 * points to type U: _Underlying type is *U_
 * indexable with value type U:
 * sliceable with value type U:
 * map type with value type U:
 * has field or method F of type U:
 * chan of type U: _Underlying type is chan 
+
+
+Others arguably demonstrate a weak point in generics with constraints:
+
+* callable:
 * convertible from U:
 * convertible to U:
 * assignable from U:
 * assignable to U:
 
-For most of these it is evident how to translate it to constraints. 
-
 #### Callable
 
-for `callable` this proposal is not quite as powerful as Taylors. 
-You _can_ constrain a type parameter to have a function type as it's 
+for `callable` can constrain a type parameter to have a function type as it's 
 underlying type:
 
 ```Go
@@ -546,46 +584,31 @@ func [F CanCallWithIntAndFloat] Caller(f F) {
 
 This will work for functions that have no return value. 
 
-There is no way of covering all functions that take an int and a float as 
+There is no way of covering _all_ functions that take an int and a float as 
 arguments.
-So, when dealing with callables constraints, as proposed here, will make 
+So, when dealing with callables, constraints, as proposed here, will make 
 generics less flexible than what Taylor has proposed.
 
 #### Assignments and conversions
 
-Assignabillity and convertability follows from the underlying types of the 
-parameters involved. 
-Go has these two rules:
+In order to assign/convert to/from a generic type parameter it is nessecary
+that:
 
-* An expression of type `T` is assignable to a variable of type `U` if `T` 
-  and `U` have the same underlying type
-  and `T` or `U` is an unnamed type.
-* An expression of type `T` is convertible to type `U` if `T` and `U` have 
-  same underlying type.
+* The parameter is constrained to have one single underlying type
+* What you assign/convert to/from is of that underlying type
 
-With these, one can determine assignability and convertability based on what 
-underlying types type parameters are constrained to.
+Again generics as Taylor has proposed is more flexible. By postponing 
+verification of correctnes to the point of instantiation, the compiler can
+know the concrete types being substituted for parameters, and allow/disallow
+the operations based on that knowledge. 
 
-## Specialization 
+## Static Switch
 
 Whats written above constitutes my proposal for constraints in Go. 
 
-Here I'll describe _specialization_ which I have considered adding to this 
-proposal.
+Here I'll describe static switch, a form of _specialization_ which I have 
+cosidered, but decided not to add to this proposal.
 
-In C++ template programming you may employ specialization and SFINAE to 
-customize a generic definition for certain types. 
-
-Template specialization relies on overloading, and would not, in my opinion, 
-be a good fit for Go. 
-
-SFINAE basically means that you can create several definitions of a generic 
-type/function and the compiler will decide at point of instantiation which one 
-'works'. 
-This is obviously at odds with the goals of this proposal.
-
-On the other hand some kind of conditional behaviour for generic definitions 
-could be beneficial. 
 Consider the `Max` function:
 
 ```Go
@@ -617,7 +640,8 @@ func [T Lessable] Max(t1, t2 T) T {
 
 We can't have these two definitions at the same time as overloading is not 
 allowed. 
-One could consider some form of _static switch_:
+
+One could add _static switch_ to Go:
 
 ```Go
 func [T] Max(t1, t2 T) T {
@@ -639,16 +663,14 @@ func [T] Max(t1, t2 T) T {
 ```
 
 The idea would be:
-
-* The compiler (still) verifies the correctness of this code at the point of 
-  definition. 
-* On instantiation apply the first switch case that matches (ie. `T` satisfies 
-  the constraint).
+* Each case is guarded by a constraint. In the case block methods, fields 
+  and operations defined by the guarding constraint may be used.
+* On instantiation the compiler should apply the first switch case that matches
+  (ie. `T` satisfies the constraint).
 * If no case matches, the compiler issues a compile error, in this case 
-  something like "`T` must implement one of `Ordered`, `Lessable`."
+  something like "`T` must fullfil one of constraints `Ordered`, `Lessable`."
 * A `default` entry is allowed, so that all types can be handled in one switch.    
     
-I have not included type switch in this proposal.  
 While this construct works nicely for the `Max` example, I'm not convinced 
 that it's usefulness is broad enough to warrant its addition to Go. 
 Also I'm not sure about the syntax.
@@ -674,10 +696,13 @@ class MyClass<L extends Loggable> {
 }
 ```
 
-`Loggable` may be a class or an interface, and any method defined on `Loggable` 
-may here be applied to field `l`. 
+`Loggable` may be a class or an interface, and any concrete type substituted 
+for `L` must extend/implement `Loggable`. 
 
-This works well in java where everything is a pointer to an object. 
+Thus any method defined on `Loggable` may here be applied to field `l`. 
+
+This works well in java where everything is a pointer to an object, and where 
+inheritance plays a central role.
 It has served as inspiration for this proposal, though what's described here 
 is quite different due to the language differences.
 
@@ -687,8 +712,8 @@ C++ has a template programming system that is very powerful.
 It's implementation is based on the idea of template expansion and it is 
 heavily used in stdlib. 
 Those two factors combined means that using a template type may lead to many 
-levels of expansion which in turn, if there is an error, can lead to horrific 
-error messages. 
+levels of expansion which in turn, if the event of an error, can lead to quite
+horrific error messages. 
 
 The C++ community is attempting to fix this by introducing 'concepts', 
 currently slated for inclusion in C++20.  
@@ -713,7 +738,7 @@ the result.
 
 Also, if I understand correctly, while C++ concepts limits what concrete types 
 may be substituted for a type parameter, they do _not_ limit what may be done
-with a type parameter in a generic definition, so they do not provide 'dynamic
+with a type parameter in a generic definition, so they do not provide 'generic
 type safety' like this proposal does.
 
 
@@ -735,7 +760,7 @@ underlying idea.
 I'm under no illusions that this proposal will be adopted, but I hope that it 
 may in some way benefit the discussion on generics in Go. 
 
-I do believe that 'type safe generics', ie. a form of generics that the 
+I _do_ believe that 'type safe generics', ie. a form of generics that the 
 compiler can check at the point of declaration, is the best way to implement
 generics in Go.
 
