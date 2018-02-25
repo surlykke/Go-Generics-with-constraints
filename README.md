@@ -9,7 +9,7 @@ This is a proposal for adding generics with constraints to the Go language.
 It is written by Christian Surlykke, fall of 2017, winter 2017/2018.
 
 There have been lots of discussion on how generics in Go could look. 
-In particular Ian Lance Taylor have written detailed proposals
+In particular Ian Lance Taylor have written detailed proposals:
 [15292 Generics](https://github.com/golang/proposal/blob/master/design/15292-generics.md), 
 [Type Functions](https://github.com/golang/proposal/blob/master/design/15292/2010-06-type-functions.md), 
 [Generalized Types](https://github.com/golang/proposal/blob/master/design/15292/2011-03-gen.md), 
@@ -33,7 +33,7 @@ restrictions from definitions.
 For example, given a generic definition:
 ```Go
 func [T] Add(x1,x2 T) T {
-	return x1 + x2 + x3
+	return x1 + x2
 }
 ```
 a compiler would extract the restriction 'addable' - that a concrete type 
@@ -204,6 +204,17 @@ func [T Cloneable[T]] copy(t T) {
 }
 ```
 
+Type parameters in generic constraint declarations _may not_ be constrained.
+
+So this:
+
+```Go
+constraint Foo {..,}
+constraint [T Foo] Baa {...}
+```
+
+is _not_ allowed.
+
 ### Underlying types
 
 A constraint may limit what underlying types a type can have. 
@@ -265,7 +276,7 @@ constraint[T] Array {
 
 ### Comparable
 
-There will be _one_ built in constraint: `Comparable`. To satisfy `Comparable`
+There will be _one_ built-in constraint: `Comparable`. To satisfy `Comparable`
 a type must be just that - comparable, ie. have a comparable underlying type.
 
 `Comparable` might be used like this:
@@ -273,6 +284,9 @@ a type must be just that - comparable, ie. have a comparable underlying type.
 ```Go
 type [K Comparable, V] Map [K]V
 ```
+
+`Comparable` is logically equivalent to a constraint listing the infinite set
+of comparable fundamental types as underlying.
 
 ### Embedding 
 
@@ -341,6 +355,10 @@ constraint Arithmetic {
 constraint Integer { 
 	:uint8, uint16, uint32, uint64, uint, 
 	 int8, int16, int32, int64, int
+}
+
+constraint PositiveInteger {
+	:uint8, uint16, uint32, uint64, uint, 
 }
 
 constraint Ordered { 
@@ -424,9 +442,7 @@ Typesafe fruit-count comparison could be done like:
 
 ```Go
 
-constraint PositiveInt { :uint8, uint16, uint32, uint64, uint }
-
-func [Counter PositiveInt] Compare(c1, c2 Counter) int {
+func [Counter PositiveInteger] Compare(c1, c2 Counter) int {
 	if c1 < c2 {         // We know Counter supports '<'
 		return -1
 	} else if c1 == c2 { // We know Counter is comparable
@@ -491,7 +507,6 @@ func (ms *MyStruct) Initialize() {
 var myStruct = Singleton[MyStruct]();
 ```
 
-
 The function `TypeOf` is executed at runtime invoking reflection. One might
 consider adding a built-in function TypeOf which could be executed at compile
 time (instatiation time, that is).
@@ -509,7 +524,7 @@ constraint ByteSequence {
 
 func [T ByteSequence] Join(a []T, sep T) T {
 	if len(a) == 0 {
-		return []T{}
+		return T([]byte{})
 	}
 	if len(a) == 1 {
 		return a[0]
@@ -533,33 +548,28 @@ func [T ByteSequence] Join(a []T, sep T) T {
 There are a number of examples in Taylors proposal, most of which can be 
 rewritten to use constraints as we have described them here.
 
-We leave that as an excercise for the reader.
-
 In a section about 
 [type checking](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md#type-checking), 
 Taylor offers a list of restrictions that the compile might extract from 
 generic declarations. 
-In short form these are:
 
 Many of those translate straight forward to constraints:
 
-* addable: _As `Addable` above_
-* integral: _As `Integer` above_
-* numeric: _As `Arithmetic` above_
-* boolean: _Underlying type is `bool`_
-* comparable: _Underlying type is a comparable type_
-* ordered: _Underlying type is `string` or a non-complex number type_
-* composite: _Type is constrained to have a field or underlying type is a 
-            struct_
-* points to type U: _Underlying type is *U_
-* indexable with value type U:
-* sliceable with value type U:
-* map type with value type U:
-* has field or method F of type U:
-* chan of type U: _Underlying type is chan 
+* addable: `Addable`
+* integral: `Integer`
+* numeric: `Arithmetic`
+* boolean: Underlying type is `bool`
+* comparable: `Comparable`
+* ordered: `Ordered`
+* composite: Type is constrained to have a field or underlying type is a struct
+* points to type U: Underlying type is *U
+* indexable with value type U: Underlying type is `[#]U` or `[]U`
+* sliceable with value type U: Underlying type is `[#]U` or `[]U`
+* map type with value type U: Underlying type is `[K]U` for some `K`
+* has field or method F of type U: Type is required to have field or method.
+* chan of type U: Underlying type is `chan U`
 
-
-Others arguably demonstrate a weak point in generics with constraints:
+Others arguably demonstrate weaknesses in generics with constraints:
 
 * callable:
 * convertible from U:
@@ -607,7 +617,7 @@ the operations based on that knowledge.
 Whats written above constitutes my proposal for constraints in Go. 
 
 Here I'll describe static switch, a form of _specialization_ which I have 
-cosidered, but decided not to add to this proposal.
+considered, but decided not to add to this proposal.
 
 Consider the `Max` function:
 
@@ -663,7 +673,7 @@ func [T] Max(t1, t2 T) T {
 ```
 
 The idea would be:
-* Each case is guarded by a constraint. In the case block methods, fields 
+* Each case is guarded by a constraint. Inside the case block methods, fields 
   and operations defined by the guarding constraint may be used.
 * On instantiation the compiler should apply the first switch case that matches
   (ie. `T` satisfies the constraint).
@@ -722,11 +732,10 @@ may be required to have, and they would be checked at the point of
 instantiation, to allow the compiler to issue simpler warnings. 
 
 C++ concepts are a lot more complicated than the constraint system I've 
-described here. 
+described here. One reason being that Go's type system is much simpler. 
 
-One reason is that Go's type system is much simpler. 
-Consider `a < b`:  When you see an expresson like that in a Go program, 
-you know that
+Consider the expression `a < b`:  When you that in a Go
+program, you know that
 
 * `a` and `b` have same type
 * The underlying type of `a` and `b` must be `string` or one of the 
@@ -740,6 +749,7 @@ Also, if I understand correctly, while C++ concepts limits what concrete types
 may be substituted for a type parameter, they do _not_ limit what may be done
 with a type parameter in a generic definition, so they do not provide 'generic
 type safety' like this proposal does.
+
 
 
 ### Backward compability
@@ -766,7 +776,8 @@ generics in Go.
 
 This proposal is the best idea for type safe generics I've been able to come 
 up with. 
-Surely others can come up with something better, perhaps inspired by this.
+Surely others can come up with something better, perhaps in part inspired by 
+this.
 
 
 
