@@ -27,7 +27,7 @@ on instantiation.
 
 In 
 [Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
-Taylor abandons this in favour of having the compiler the compiler _extract_ 
+Taylor abandons constraints in favour of having the compiler _extract_ 
 restrictions from definitions.
 
 For example, given a generic definition:
@@ -81,7 +81,7 @@ explicitly the value of type parameters for clarity.
 Before moving on to constraints, lets briefly recapitulate how generics looks 
 according to Taylors proposal.
 
-Type- and function definitions at package level may be generic. 
+Type- and function definitions at package level may be _generic_. 
 That means they may depend on type parameters. 
 
 Here's an example, from 
@@ -130,9 +130,8 @@ We'll look at each of these in turn.
 
 ### Methods
 
-Let's say we want to ensure a type has the a method `Log()`.
-
-We could then define a constraint like this:
+Let's say we want to ensure a type has the a method `Log()`.  We could define 
+this constraint:
 
 ```Go
 constraint Loggable { 
@@ -141,10 +140,9 @@ constraint Loggable {
 ```
 
 Here `constraint` is a new keyword which marks the start of a constraint 
-declaration.
-
-This declaration defines the constraint `Loggable`. To fulfill `Loggable` a 
-type must have a method `Log()`.
+declaration. 
+The declaration defines the constraint `Loggable`. 
+To satisfy `Loggable` a type must have a method with signature `Log()`.
 
 We can use `Loggable` in a generic declaration:
 
@@ -177,7 +175,6 @@ func [E Entity] Equal(e1, e2 E) bool {
 }
 ```
 
-
 Fields and methods can be mixed in constraints:
 
 ```Go
@@ -204,9 +201,8 @@ func [T Cloneable[T]] copy(t T) {
 }
 ```
 
-Type parameters in generic constraint declarations _may not_ be constrained.
-
-So this:
+Type parameters in generic constraint declarations _may not_ be constrained, so 
+this:
 
 ```Go
 constraint Foo {..,}
@@ -232,10 +228,10 @@ its underlying type to satisfy this constraint.
 The format of a declaration of underlying types is a line starting with `:` 
 followed by a comma separated list of the allowed types. 
 
-A constraint may declare _at most_ one set of underlying types.
+A constraint may declare _at most_ one set of underlying types, and absence of 
+an underlying type declaration means that _any_ underlying type is allowed.
 
-Absence of an underlying type declaration means that any underlying type is 
-allowed.
+Declaration of underlying types may _not_ be combined with field declarations. 
 
 Underlying type may be one of Go's predeclared boolean, string, numeric or 
 string types, or it may be a struct, slice, channel, array, pointer or 
