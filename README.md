@@ -231,11 +231,15 @@ followed by a comma separated list of the allowed types.
 A constraint may declare _at most_ one set of underlying types, and absence of 
 an underlying type declaration means that _any_ underlying type is allowed.
 
-Declaration of underlying types may _not_ be combined with field declarations. 
-
 Underlying type may be one of Go's predeclared boolean, string, numeric or 
 string types, or it may be a struct, slice, channel, array, pointer or 
 function type.
+
+Declaration of underlying types may _not_ be combined with field declarations. 
+Here's why: If you define a field constraint you implicitly restrict the 
+underlying type to be some struct with such a field. Hence the the only 
+underlying type constraints that would make sense are structs with said field, 
+but with those the original field constraint would be superfluous.
 
 ### Arrays
 
@@ -268,11 +272,13 @@ constraint[T] Array {
 	:[#]T
 }
 ```
-
+Arrays aren't used that much in Go programming (explicitly, that is) and I 
+don't expect generics to change that. This array notation is included mainly 
+for completeness.
 
 ### Comparable
 
-There will be _one_ built-in constraint: `Comparable`. To satisfy `Comparable`
+There will be one _built-in_ constraint: `Comparable`. To satisfy `Comparable`
 a type must be just that - comparable, ie. have a comparable underlying type.
 
 `Comparable` might be used like this:
@@ -306,9 +312,11 @@ There is no 'overriding', which means:
 
 * The name of a field or method on `Baa` may not be the same as a name of a 
   field or method on `Foo`
-* Having a list of underlying types both in `Foo` and `Baa` is an error.
+* Having an underlying types constraint both in `Foo` and `Baa` is an error.
+* Having a field constraint in `Foo` or `Baa` and an underlying types 
+  constraint in `Foo` or `Baa` is an error
 * If a constraint embeds `Comparable` (directly or indirectly) it cannot 
-  explicitly define a  list of underlying types
+  explicitly define a  list of underlying types.
 
 ### Comparing constraints
 
