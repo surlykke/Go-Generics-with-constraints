@@ -60,8 +60,8 @@ Constraints serve a double purpose:
 The aim is that the correctness of a generic definition can be verified at the 
 point of _definition_:  
 When instantiating a generic type, the compiler only needs to verify that the 
-concrete types substituted for the type parameters fulfill the given 
-constraints, and then the validity of the instantiation follows.
+concrete types fulfill the given constraints, and the validity of the 
+instantiation will follow.
 
 I believe that with this, the compiler can be made simpler, the code will be 
 more readable and that it will allow for better tooling.
@@ -201,15 +201,12 @@ func [T Cloneable[T]] copy(t T) {
 }
 ```
 
-Type parameters in generic constraint declarations _may not_ be constrained, so 
-this:
+Type parameters in generic constraint declarations _may not_ be constrained:
 
 ```Go
 constraint Foo {..,}
-constraint [T Foo] Baa {...}
+constraint [T Foo] Baa {...} // Not allowed
 ```
-
-is _not_ allowed.
 
 ### Underlying types
 
@@ -235,11 +232,12 @@ Underlying type may be one of Go's predeclared boolean, string, numeric or
 string types, or it may be a struct, slice, channel, array, pointer or 
 function type.
 
-Declaration of underlying types may _not_ be combined with field declarations. 
-Here's why: If you define a field constraint you implicitly restrict the 
-underlying type to be some struct with such a field. Hence the the only 
-underlying type constraints that would make sense are structs with said field, 
-but with those the original field constraint would be superfluous.
+Declaration of underlying types may _not_ be combined with field declarations: 
+If you define a field constraint you implicitly restrict the 
+underlying type to be some struct with such a field. 
+Hence the the only underlying type constraints that would make sense are 
+structs with said field, but with those the original field constraint would be 
+superfluous.
 
 ### Arrays
 
@@ -264,6 +262,8 @@ constraint Uint32Array {
 	:[#]uint32
 }
 ```
+which would be satisfied by any type having an array of `uint32` as underlying 
+type.
 
 A generic variant:
 
@@ -336,7 +336,7 @@ Constraint `C1` implies constraint `C2` if and only if:
 
 ### Standard constraints
 
-A number of constraints will be so common that they should be included in Go's 
+A number of constraints will be so common that they might be included in Go's 
 standard library. 
 These include:
 
@@ -412,6 +412,19 @@ func [T Constraint2] (f Foo[T]) M() {
 ```
 
 is allowed only if Constraint2 is _equal_ to Constraint1.
+
+### Partial instantiation
+
+A generic type may be used in another generic declaration if the compiler is 
+able to verify that constraints are fulfilled. For example:
+
+```Go
+type[T Constraint1] Foo ...
+
+func[U Constraint2] f(Foo[U] foo) ...
+```
+
+Here `Constraint2` must imply `Constraint1` for the declaration to be valid. 
 
 ### Overloading generic definitions
 
@@ -496,7 +509,7 @@ func[T Initializable] Factory() *T {
 }
 
 ```
-which might be used as:
+which could be used as:
 
 ```Go
 type MyStruct struct {
@@ -583,7 +596,7 @@ Others arguably demonstrate weaknesses in generics with constraints:
 
 #### Callable
 
-for `callable` can constrain a type parameter to have a function type as it's 
+We can constrain a type parameter to have a function type as it's 
 underlying type:
 
 ```Go
@@ -681,8 +694,8 @@ The idea would be:
   and operations defined by the guarding constraint may be used.
 * On instantiation the compiler should apply the first switch case that matches
   (ie. `T` satisfies the constraint).
-* If no case matches, the compiler issues a compile error, in this case 
-  something like "`T` must fullfil one of constraints `Ordered`, `Lessable`."
+* If no case matches, the compiler issues a error, something like: _`T` must 
+  fullfil one of constraints `Ordered`, `Lessable`._
 * A `default` entry is allowed, so that all types can be handled in one switch.    
     
 While this construct works nicely for the `Max` example, I'm not convinced 
@@ -731,30 +744,29 @@ horrific error messages.
 
 The C++ community is attempting to fix this by introducing 'concepts', 
 currently slated for inclusion in C++20.  
+
 C++ concepts describe traits that a type parameter or a set of type parameters
 may be required to have, and they would be checked at the point of 
 instantiation, to allow the compiler to issue simpler warnings. 
 
-C++ concepts are a lot more complicated than the constraint system I've 
-described here. One reason being that Go's type system is much simpler. 
-
-Consider the expression `a < b`:  When you that in a Go
-program, you know that
+C++ concepts are both a a lot more powerful and a lot more complicated than the 
+constraint system I've described here.
+One factor that allows for some simplicity in this proposal is Go's type 
+system: 
+Consider the expression `a < b`.
+When you encounter that in a Go program, you know that
 
 * `a` and `b` have same type
 * The underlying type of `a` and `b` must be `string` or one of the 
   non-complex number types.
 * The result of the expression is `bool`
 
-In C++ you know a lot less - the types of `a` and `b` can be anything as can 
-the result.
+In C++ you'd know a lot less - `a` and `b` may have any type as may the result.
 
 Also, if I understand correctly, while C++ concepts limits what concrete types 
 may be substituted for a type parameter, they do _not_ limit what may be done
 with a type parameter in a generic definition, so they do not provide 'generic
 type safety' like this proposal does.
-
-
 
 ### Backward compability
 
@@ -776,7 +788,7 @@ may in some way benefit the discussion on generics in Go.
 
 I _do_ believe that 'type safe generics', ie. a form of generics that the 
 compiler can check at the point of declaration, is the best way to implement
-generics in Go.
+generics in Go (or any language, for that matter). 
 
 This proposal is the best idea for type safe generics I've been able to come 
 up with. 
