@@ -6,7 +6,7 @@ If that happens this project will be deleted_
 # Generics with constraints for Go
 
 This is a proposal for adding generics with constraints to the Go language. 
-It is written by Christian Surlykke, fall of 2017, winter 2017/2018.
+It is written by Christian Surlykke 2017/2018.
 
 There have been lots of discussion on how generics in Go could look. 
 In particular Ian Lance Taylor have written detailed proposals:
@@ -130,7 +130,7 @@ We'll look at each of these in turn.
 
 ### Methods
 
-Let's say we want to ensure a type has the a method `Log()`.  We could define 
+Let's say we want to ensure a type has a method `Log()`.  We could define 
 this constraint:
 
 ```Go
@@ -187,27 +187,6 @@ constraint LoggableEntity {
 There may be any number of methods and fields in a constraint.
 Names may not be reused.
 
-### Generic constraints
-
-Constraints may be generic:
-
-```Go
-constraint [T] Cloneable {
-	Clone() T
-}
-
-func [T Cloneable[T]] copy(t T) {
-	return t.Clone()
-}
-```
-
-Type parameters in generic constraint declarations _may not_ be constrained:
-
-```Go
-constraint Foo {..,}
-constraint [T Foo] Baa {...} // Not allowed
-```
-
 ### Underlying types
 
 A constraint may limit what underlying types a type can have. 
@@ -238,6 +217,27 @@ underlying type to be some struct with such a field.
 Hence the the only underlying type constraints that would make sense are 
 structs with said field, but with those the original field constraint would be 
 superfluous.
+
+### Generic constraints
+
+Constraints may be generic:
+
+```Go
+constraint [T] Cloneable {
+	Clone() T
+}
+
+func [T Cloneable[T]] copy(t T) {
+	return t.Clone()
+}
+```
+
+Type parameters in generic constraint declarations may _not_ be constrained:
+
+```Go
+constraint Foo {..,}
+constraint [T Foo] Baa {...} // Not allowed
+```
 
 ### Arrays
 
@@ -308,15 +308,16 @@ constraint Baa {
 
 whereby `Baa` gets all methods, fields of `Foo`. 
 
-There is no 'overriding', which means:
+There is no 'overriding', which means that if `Baa` embeds `Foo`:
 
-* The name of a field or method on `Baa` may not be the same as a name of a 
-  field or method on `Foo`
-* Having an underlying types constraint both in `Foo` and `Baa` is an error.
-* Having a field constraint in `Foo` or `Baa` and an underlying types 
-  constraint in `Foo` or `Baa` is an error
-* If a constraint embeds `Comparable` (directly or indirectly) it cannot 
-  explicitly define a  list of underlying types.
+* The name of a field or method in `Baa` may not be the name of a field or 
+  method in `Foo`.
+* `Baa` may not declare a list of underlying types if `Foo` declares a field or 
+  a list of underlying types.
+* `Baa` may not declare a field if `Foo` declares a field or a list of 
+  underlying types.
+* `Baa` cannot declare a list of underlying types if `Foo` is `Comparable` or 
+  `Foo` embeds `Comparable`.
 
 ### Comparing constraints
 
@@ -372,6 +373,31 @@ constraint Ordered {
 	 float32, float64
 }
 ```
+
+### Built in functions
+
+Go's [built in](https://golang.org/pkg/builtin) functions may be applied to 
+type parameters if the parameter is constrained to have underlying types that 
+support the built in function in question. 
+
+Specifically:
+
+#### Type functions 
+* `func make(T Type, size ...IntegerType) Type`: `T`'s underlying type must be 
+  map, slice or array.
+* `func new(T Type) *Type`: Will work for any type. 
+
+#### Container functions
+* `func append(slice V, elems ...U)`:
+  The underlying type of `V` must be `[]U`
+* `func len(v V) int`: The underlying type of `V` must be a slice, string, 
+  channel, array or pointer to array.
+* `func cap(v V) int`: The underlying type of `V` must be a slice, a channel, 
+  an array or a pointer to an array.
+* `func close(c C)`: The underlying type of `C` must be a writeable channel.
+* `func copy(dst, src S) int`: The underlying type of `S` must be a slice.
+* `func delete(m M, key K)`: The underlying type of `M` must be `[K]V` for some 
+  `V`.
 
 ### Runtime
 
@@ -788,7 +814,7 @@ may in some way benefit the discussion on generics in Go.
 
 I _do_ believe that 'type safe generics', ie. a form of generics that the 
 compiler can check at the point of declaration, is the best way to implement
-generics in Go (or any language, for that matter). 
+generics in Go. 
 
 This proposal is the best idea for type safe generics I've been able to come 
 up with. 
