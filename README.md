@@ -51,14 +51,14 @@ So I propose generics for Go with _constraints_.
 Constraints serve a double purpose:
 
 1.  They _limit_ what concrete types may be substituted for a type parameter 
-    when instantiating a genering definition.
+    when instantiating a generic definition.
 1.  By that limitation they define _what you can do_ with a type parameter 
     in a generic definition. Eg. an operator can only be applied to a type 
 	parameter, if the parameter is constrained so that _all_ allowed types 
 	support that operator.
 
 The aim is that the correctness of a generic definition can be verified at the 
-point of _definition_:  
+point of _definition_.  
 When instantiating a generic type, the compiler only needs to verify that the 
 concrete types fulfill the given constraints, and the validity of the 
 instantiation will follow.
@@ -152,6 +152,9 @@ func [T Loggable] DoLog(t T) {
 }
 ```
 
+When instantiating `DoLog` with a concrete type, the compiler should issue an 
+error if the type substituted for `T` does not have a method `Log()`.
+
 As long as we deal with methods only, constraints look a lot like interfaces.
 
 ### Fields
@@ -215,8 +218,8 @@ Declaration of underlying types may _not_ be combined with field declarations:
 If you define a field constraint you implicitly restrict the 
 underlying type to be some struct with such a field. 
 Hence the the only underlying type constraints that would make sense are 
-structs with said field, but with those the original field constraint would be 
-superfluous.
+structs with said field, but constraining to such underlying types, the 
+original field constraint would be superfluous.
 
 ### Generic constraints
 
@@ -557,7 +560,7 @@ time (instatiation time, that is).
 
 ### Joining sequences
 
-This is an adaption of an example from Taylors 
+This is a commented adaption of an example from Taylors 
 [Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
 
 ```Go
@@ -565,19 +568,24 @@ constraint ByteSequence {
 	:[]byte, string
 }
 
+func [T] zeroval() T {
+	var t T
+	return t
+}
+
 func [T ByteSequence] Join(a []T, sep T) T {
-	if len(a) == 0 {
-		return T([]byte{})
+	if len(a) == 0 { 
+		return zeroval[T]()
 	}
 	if len(a) == 1 {
-		return a[0]
+		return a[0] 
 	}
-	n := len(sep) * (len(a) - 1)
+	n := len(sep) * (len(a) - 1) // len is applicable to both []byte and string
 	for _, v := range a {
 		n += len(v)
 	}
 	b := make(byte[], n)
-	bp := copy(b, a[0])
+	bp := copy(b, a[0])  // copy can copy from both []byte and string to []byte 
 	for _, v := range a[1:] {
 		bp += copy(b[bp:], sep)
 		bp += copy(b[bp:], v)
@@ -638,22 +646,28 @@ func [F CanCallWithIntAndFloat] Caller(f F) {
 This will work for functions that have no return value. 
 
 There is no way of covering _all_ functions that take an int and a float as 
-arguments.
+arguments. 
 So, when dealing with callables, constraints, as proposed here, will make 
 generics less flexible than what Taylor has proposed.
 
 #### Assignments and conversions
 
-In order to assign/convert to/from a generic type parameter it is nessecary
-that:
+If a generic definition depends on two type parameters it will not be possible 
+to assign or cast between them. The constraint system proposed here does not 
+allow us to verify at the point of declaration that such an assignment or cast
+is legal. 
 
-* The parameter is constrained to have one single underlying type
-* What you assign/convert to/from is of that underlying type
+To fix that, one might go the route chosen by C++ concepts where you can 
+introduce constraints _between_ type parameters, ie. simply constrain the pair
+`U` and `V` so that instances of V may be assigned to instances of U. 
 
-Again generics as Taylor has proposed is more flexible. By postponing 
-verification of correctnes to the point of instantiation, the compiler can
-know the concrete types being substituted for parameters, and allow/disallow
-the operations based on that knowledge. 
+I believe that would lead to a constraint system much more complicated than 
+what is proposed here, and, in my opinion, not worth the bother.
+
+But, in this respect,  generics as Taylor has proposed is more flexible. 
+By postponing verification of correctnes to the point of instantiation, 
+the compiler can know the concrete types being substituted for parameters, and 
+allow/disallow these operations based on that knowledge.  
 
 ## Static Switch
 
@@ -728,8 +742,9 @@ While this construct works nicely for the `Max` example, I'm not convinced
 that it's usefulness is broad enough to warrant its addition to Go. 
 Also I'm not sure about the syntax.
 
-I feel the subject is complicated enough that it should be considered 
-separately.
+While constraints do offer the opportunity to introduce a typesafe form of 
+specialization into generics, I feel the subject is complicated enough that it 
+should be considered separately.
 
 ## Comparison with other languages
 
@@ -757,7 +772,7 @@ Thus any method defined on `Loggable` may here be applied to field `l`.
 This works well in java where everything is a pointer to an object, and where 
 inheritance plays a central role.
 It has served as inspiration for this proposal, though what's described here 
-is quite different due to the language differences.
+is quite different due to the differences of the two languages.
 
 ### C++
 
@@ -789,10 +804,14 @@ When you encounter that in a Go program, you know that
 
 In C++ you'd know a lot less - `a` and `b` may have any type as may the result.
 
-Also, if I understand correctly, while C++ concepts limits what concrete types 
-may be substituted for a type parameter, they do _not_ limit what may be done
-with a type parameter in a generic definition, so they do not provide 'generic
-type safety' like this proposal does.
+To my eye, C++ concepts look mostly like a kind of 'compile-time unit testing' 
+\- small template programs the compiler runs prior to instantiating a template, 
+and on the failure of which, an error is issued.
+
+While C++ concepts limits what concrete types may be substituted for a type 
+parameter, they do _not_ limit what may be done with a type parameter in a 
+generic definition, so they do not provide 'generic type safety' like this 
+proposal does.
 
 ### Backward compability
 
