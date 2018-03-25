@@ -1,8 +1,3 @@
-_Note: This project serves as a placeholder.  
-Once it is done I hope to have it added to 
-[Go Proposals](https://github.com/golang/proposal).
-If that happens this project will be deleted_
-
 # Generics with constraints for Go
 
 This is a proposal for adding generics with constraints to the Go language. 
@@ -61,7 +56,7 @@ The aim is that the correctness of a generic definition can be verified at the
 point of _definition_.  
 When instantiating a generic type, the compiler only needs to verify that the 
 concrete types fulfill the given constraints, and the validity of the 
-instantiation will follow.
+instantiation shall follow.
 
 I believe that with this, the compiler can be made simpler, the code will be 
 more readable and that it will allow for better tooling.
@@ -82,9 +77,8 @@ Before moving on to constraints, lets briefly recapitulate how generics looks
 according to Taylors proposal.
 
 Type- and function definitions at package level may be _generic_. 
-That means they may depend on type parameters. 
-
-Here's an example, from 
+That means they may depend on type parameters.
+This is an example, from 
 [Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md), 
 of a generic type `List` of `T` where `T` is a type parameter:
 
@@ -95,7 +89,7 @@ type [T] List struct {
 }
 ```
 
-We may also define a generic function:
+A generic function may also be defined:
 
 ```Go
 func [T] Push(l *List[T], t T) *List[T]{
@@ -103,7 +97,7 @@ func [T] Push(l *List[T], t T) *List[T]{
 }
 ```
 
-We can use our generic definition like this:
+The generic definitions can be used like this:
 
 ```Go
 var myList *List[int] = nil
@@ -130,8 +124,8 @@ We'll look at each of these in turn.
 
 ### Methods
 
-Let's say we want to ensure a type has a method `Log()`.  We could define 
-this constraint:
+Let's say we want to ensure a type has a method `Log()`.  We can define 
+a constraint:
 
 ```Go
 constraint Loggable { 
@@ -210,9 +204,9 @@ followed by a comma separated list of the allowed types.
 A constraint may declare _at most_ one set of underlying types, and absence of 
 an underlying type declaration means that _any_ underlying type is allowed.
 
-Underlying type may be one of Go's predeclared boolean, string, numeric or 
-string types, or it may be a struct, slice, channel, array, pointer or 
-function type.
+The underlying types in the declaration may be one of Go's predeclared boolean, 
+string, numeric or string types, or it may be a struct, slice, channel, array, 
+pointer or function type.
 
 Declaration of underlying types may _not_ be combined with field declarations: 
 If you define a field constraint you implicitly restrict the 
@@ -408,11 +402,11 @@ Constraints have no presence at runtime.
 It is not possible to cast to constraints, declare variables to instantiate 
 constraints or to use reflection to query about constraints.
 
-This concludes our description of constraints. 
-Now we'll turn back to generics.
-
-
 ## More on generics
+
+What's written above concludes my description of constraints. 
+Now I'll turn back to generics.
+
 
 ### Type methods
 
@@ -612,7 +606,8 @@ Many of those translate straight forward to constraints:
 * boolean: Underlying type is `bool`
 * comparable: `Comparable`
 * ordered: `Ordered`
-* composite: Type is constrained to have a field or underlying type is a struct
+* composite: Type is constrained to have a field or its underlying type is a 
+  struct
 * points to type U: Underlying type is *U
 * indexable with value type U: Underlying type is `[#]U` or `[]U`
 * sliceable with value type U: Underlying type is `[#]U` or `[]U`
@@ -664,7 +659,8 @@ introduce constraints _between_ type parameters, ie. simply constrain the pair
 I believe that would lead to a constraint system much more complicated than 
 what is proposed here, and, in my opinion, not worth the bother.
 
-But, in this respect,  generics as Taylor has proposed is more flexible. 
+But, in this respect,  generics as Taylor has proposed is certainly more
+flexible. 
 By postponing verification of correctnes to the point of instantiation, 
 the compiler can know the concrete types being substituted for parameters, and 
 allow/disallow these operations based on that knowledge.  
@@ -730,21 +726,18 @@ func [T] Max(t1, t2 T) T {
 ```
 
 The idea would be:
-* Each case is guarded by a constraint. Inside the case block methods, fields 
-  and operations defined by the guarding constraint may be used.
+* Each `case` is guarded by a constraint. Inside that `case` methods, 
+  fields and operations defined by the guarding constraint may be used.
 * On instantiation the compiler should apply the first switch case that matches
   (ie. `T` satisfies the constraint).
 * If no case matches, the compiler issues a error, something like: _`T` must 
   fullfil one of constraints `Ordered`, `Lessable`._
 * A `default` entry is allowed, so that all types can be handled in one switch.    
     
-While this construct works nicely for the `Max` example, I'm not convinced 
-that it's usefulness is broad enough to warrant its addition to Go. 
-Also I'm not sure about the syntax.
-
-While constraints do offer the opportunity to introduce a typesafe form of 
-specialization into generics, I feel the subject is complicated enough that it 
-should be considered separately.
+This demonstrates how constraints make it possible to introduce a typesafe form 
+of specialization into generics.
+It could be an addon to generics with constraints and as such, should be 
+considered separately.
 
 ## Comparison with other languages
 
