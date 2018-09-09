@@ -27,7 +27,7 @@ restrictions from definitions.
 
 For example, given a generic definition:
 ```Go
-func [T] Add(x1,x2 T) T {
+func Add(type T)(x1,x2 T) T {
 	return x1 + x2
 }
 ```
@@ -83,27 +83,27 @@ This is an example, from
 of a generic type `List` of `T` where `T` is a type parameter:
 
 ```Go
-type [T] List struct {
+type List(type T) struct {
 	value T
-	next *List[T]
+	next *List(T)
 }
 ```
 
 A generic function may also be defined:
 
 ```Go
-func [T] Push(l *List[T], t T) *List[T]{
-	return &List[T]{t, l}
+func Push(type T)(l *List(T), t T) *List(T){
+	return &List(T){t, l}
 }
 ```
 
 The generic definitions can be used like this:
 
 ```Go
-var myList *List[int] = nil
+var myList *List(int) = nil
 
-myList = Push[int](myList, 2)
-myList = Push[int](myList, 4)
+myList = Push(int)(myList, 2)
+myList = Push(int)(myList, 4)
 
 for l := myList; l != null; l = l.next {
 	fmt.Println(l.value)
@@ -114,151 +114,84 @@ for l := myList; l != null; l = l.next {
 
 A constraint limits what concrete types may be substituted for a type 
 parameter. 
-It can do so in 3 ways:
+It can do so in 2 ways:
 
-* Require the type to have specific _methods_
-* Require the type to have specific _fields_
+* Require the type to implement _interfaces_
 * Restrict what _underlying types_ the type may have. 
 
-We'll look at each of these in turn.
-
-### Methods
+### Interfaces
 
 Let's say we want to ensure a type has a method `Log()`.  We can define 
-a constraint:
+an interface in a well known way:
 
 ```Go
-constraint Loggable { 
+type Loggable interface { 
 	Log()
 }
 ```
 
-Here `constraint` is a new keyword which marks the start of a constraint 
-declaration. 
-The declaration defines the constraint `Loggable`. 
-To satisfy `Loggable` a type must have a method with signature `Log()`.
-
-We can use `Loggable` in a generic declaration:
+We can use interface `Loggable` to _constrain_ a type parameter in a generic 
+declaration:
 
 ```Go
-func [T Loggable] DoLog(t T) {
+func (type T Loggable) DoLog(t T) {
 	T.Log() // Allowed because T is constrained by Loggable 
 }
 ```
-
 When instantiating `DoLog` with a concrete type, the compiler should issue an 
-error if the type substituted for `T` does not have a method `Log()`.
-
-As long as we deal with methods only, constraints look a lot like interfaces.
-
-### Fields
-
-A constraint with a field can look like this:
-
-```Go 
-constraint Entity {
-	Id uint64
-}
-```
-
-It would be satisfied by any type having a field named `Id` of type `uint64`.
-Obviously this means that the type is a struct of sorts.
-
-An example use could be:
-
-```Go
-func [E Entity] Equal(e1, e2 E) bool {
-	return e1.Id == e2.Id
-}
-```
-
-Fields and methods can be mixed in constraints:
-
-```Go
-constraint LoggableEntity {
-	Id uint64
-	Log()
-}
-```
-
-There may be any number of methods and fields in a constraint.
-Names may not be reused.
+error if the type substituted for `T` does not implement `Loggable`.
 
 ### Underlying types
 
-A constraint may limit what underlying types a type can have. 
-An example
+We may constrain a type parameter by limiting what underlying types it can 
+have. 
+
+An underlying-type constraint has the form of a colon followed by a parenthesized 
+list of the allowed underlying types separated by `||`. For example:
 
 ```Go
-constraint PositiveInt {
-	:uint8, uint16, uint32, uint64, uint
-}
+:(uint8 || uint16 || uint32)
 ```
 
-A type must have one of `uint8`, `uint16`, `uint32`, `uint64` _or_ `uint` as 
-its underlying type to satisfy this constraint.
+A type must have one of `uint8`, `uint16` or `uint32` as its underlying type 
+to satisfy this constraint.
 
-The format of a declaration of underlying types is a line starting with `:` 
-followed by a comma separated list of the allowed types. 
-
-A constraint may declare _at most_ one set of underlying types, and absence of 
-an underlying type declaration means that _any_ underlying type is allowed.
-
-The underlying types in the declaration may be one of Go's predeclared boolean, 
-string, numeric or string types, or it may be a struct, slice, channel, array, 
-pointer or function type.
-
-Declaration of underlying types may _not_ be combined with field declarations: 
-If you define a field constraint you implicitly restrict the 
-underlying type to be some struct with such a field. 
-Hence the the only underlying type constraints that would make sense are 
-structs with said field, but constraining to such underlying types, the 
-original field constraint would be superfluous.
-
-### Generic constraints
-
-Constraints may be generic:
+We can use this in a generic declaration:
 
 ```Go
-constraint [T] Cloneable {
-	Clone() T
-}
-
-func [T Cloneable[T]] copy(t T) {
-	return t.Clone()
+func(type T :(uint8 || uint16 || uint32)) mul(t1, t2 T) T {
+	return t1*t2
 }
 ```
+Here the compiler knows T to have `uint8`, `uint16` or `uint32` as 
+underlying type, hence the multiplication operator can be applied. 
+Also, due to the strictness of Go's type system, the result of `t1*t2` will be 
+`T`.
 
-Type parameters in generic constraint declarations may _not_ be constrained:
+OTOH a declaration like this:
 
 ```Go
-constraint Foo {..,}
-constraint [T Foo] Baa {...} // Not allowed
+func(type T :(uint8 || string)) mul(t1, t2 T) T {
+	return t1*t2
+}
 ```
+would give an error, as `T` may have `string` as underlying type, which does 
+not support `*`.
+
+If the constraint specifies only _one_ underlying type, the paranthesis may be 
+omitted. So `:(uint8)` is equivalent to `:uint8`.
 
 ### Arrays
 
-Constaints described so far allow specifying that the underlying type should 
-be an array, eg:
-
-```
-constraint[T] ArrayOf5 {
-	:[5]T
-}
-```
+With whats described so far we can specify that the underlying type should 
+be an array, eg: `:[5]T`
 
 This is not very flexible, as it doesn't allow abstraction with respect to 
 array length, so as a special case we allow wildcard for that, using the 
 character `#`. 
+So to declare that the underlying type must be an array of uin32, 
+you can write: `:[#]uint32`
 
-For example to  declare that the underlying type must be an array of uin32, 
-you'd write:
-
-```Go
-constraint Uint32Array {
-	:[#]uint32
-}
-```
 which would be satisfied by any type having an array of `uint32` as underlying 
 type.
 
@@ -273,6 +206,82 @@ Arrays aren't used that much in Go programming (explicitly, that is) and I
 don't expect generics to change that. This array notation is included mainly 
 for completeness.
 
+### Combining constraints
+
+Constraints may be combined using the `&&` operator (conjunction):
+
+```Go
+Loggable && :(uint8 || uint16)
+```
+
+This constraint would be satified by a type implementing `Loggable` _and_ 
+having either `uint8` or `uint16` as its underlying type.
+
+### Named constraints
+
+A constraint may be given a name. For that we introduce a new keyword, 
+`constraint`. An example:
+
+```Go
+constraint MyConstraint Loggable && :(uint8 || uint16)
+```
+
+`MyConstraint` may now be used in generic declarations like:
+
+```Go
+func [T MyConstraint] myFunc(t T) ...
+```
+
+Or in the creation of new contraint names:
+
+```Go
+constraint MyOtherConstraint MyConstraint && SomeOtherInterface
+```
+
+Named constraints may be generic, ie:
+
+```Go
+constraint List(type T) :[T]
+```
+
+TODO: Example
+
+### Generic constraints
+
+Constraints may be based on generic interfaces:
+
+```Go
+type interface(type T) Cloneable {
+	Clone() T
+}
+
+func [T Cloneable[T]] copy(t T) {
+	return t.Clone()
+}
+```
+
+Also underlying types may also depend on type parameters, eg: `:[]T`
+
+`
+When using a generic interface or a generic underlying type in a constraint, 
+these may _not_ be defined using constraints. Ie. this:
+
+```Go
+type (type T SomeConstraint) MyInterface {...}
+
+func (type U MyInterface) myFunc(...) {...}
+```
+
+is _not_ allowed.
+
+Nor is:
+
+```Go
+constraint MyList(type T SomeConstraint) :[]T
+
+func (type T MyList) myFunc(...) {...} 
+```
+
 ### Comparable
 
 There will be one _built-in_ constraint: `Comparable`. To satisfy `Comparable`
@@ -281,56 +290,11 @@ a type must be just that - comparable, ie. have a comparable underlying type.
 `Comparable` might be used like this:
 
 ```Go
-type [K Comparable, V] Map [K]V
+type (type K Comparable, V] Map [K]V
 ```
 
 `Comparable` is logically equivalent to a constraint listing the infinite set
 of comparable fundamental types as underlying.
-
-### Embedding 
-
-Analogously to interfaces, a constraint can _embed_ another constraint
-
-```Go
-constraint Foo {
-	...
-}
-
-constraint Baa {
-	Foo
-	...
-}
-
-```
-
-whereby `Baa` gets all methods, fields of `Foo`. 
-
-There is no 'overriding', which means that if `Baa` embeds `Foo`:
-
-* The name of a field or method in `Baa` may not be the name of a field or 
-  method in `Foo`.
-* `Baa` may not declare a list of underlying types if `Foo` declares a field or 
-  a list of underlying types.
-* `Baa` may not declare a field if `Foo` declares a field or a list of 
-  underlying types.
-* `Baa` cannot declare a list of underlying types if `Foo` is `Comparable` or 
-  `Foo` embeds `Comparable`.
-
-### Comparing constraints
-
-Constraints are comparable. 
-Two constraints are equivalent if and only if
-
-* They have the same set of methods.
-* They have the same set of fields.
-* They allow the same underlying types.
-
-Constraints are partially ordered by a relation 'implies'.
-Constraint `C1` implies constraint `C2` if and only if:
-
-* Every method on `C2` is a method on `C1`
-* Every field on `C2` is a field on `C1`
-* Every underlying type allowed by `C1` is allowed by `C2`
 
 ### Standard constraints
 
@@ -339,37 +303,109 @@ standard library.
 These include:
 
 ```Go
-constraint Addable { 
-	:string, 
-	 uint8, uint16, uint32, uint64, uint, 
-	 int8, int16, int32, int64, int,
-	 float32, float64,
-	 complex64, complex128 
-}
+constraint Addable :( :string || uint8 || uint16 || uint32 || uint64 || 
+     uint || int8 || int16 || int32 || int64 || int || float32 || float64 ||
+	 complex64 || complex128 )
 
-constraint Arithmetic { 
-	:uint8, uint16, uint32, uint64, uint, 
-	 int8, int16, int32, int64, int,
-	 float32, float64,
-	 complex64, complex128
-}
+constraint Arithmetic ( :uint8 || uint16 || uint32 || uint64 || uint || 
+	 int8 || int16 || int32 || int64 || int || float32 || float64 ||
+	 complex64 || complex128 )
 
-constraint Integer { 
-	:uint8, uint16, uint32, uint64, uint, 
-	 int8, int16, int32, int64, int
-}
+constraint Integer ( :uint8 || uint16 || uint32 || uint64 || uint || 
+	 int8 || int16 || int32 || int64 || int)
 
-constraint PositiveInteger {
-	:uint8, uint16, uint32, uint64, uint, 
-}
+constraint PositiveInteger ( :uint8 || uint16 || uint32 || uint64 || uint)
 
-constraint Ordered { 
-	:string, 
-	 uint8, uint16, uint32, uint64, uint, 
-	 int8, int16, int32, int64, int,
-	 float32, float64
+constraint Ordered ( :string || uint8 || uint16 || uint32 || uint64 || uint || 
+	 int8 || int16 || int32 || int64 || int || float32 || float64)
+```
+
+(One can bikeshed about the names, obviously.)
+
+### Comparing constraints
+
+Constraints are comparable. 
+Two constraints are equivalent if and only if
+
+* They have the same set of methods.
+* They allow the same underlying types.
+
+Constraints are partially ordered by a relation 'implies'.
+Constraint `C1` implies constraint `C2` if and only if:
+
+* Every method on `C2` is a method on `C1`
+* Every underlying type allowed by `C1` is allowed by `C2`
+
+## Specialization: Static Switch
+
+To facilliate _specialization_ in generic declarations, we introduce _static
+switch_. 
+
+Consider this `Max` function:
+
+```Go
+func [T Ordered] Max(t1,t2 T) T {
+	if t1 < t2 {
+		return t2
+	} else {
+		return t1
+	}
 }
 ```
+
+It would be nice to extend this function to types that are not ordered, but 
+have a method `LessThan`:
+
+```Go
+constraint [T] Lessable { 
+	LessThan(T) bool 
+}
+
+func [T Lessable] Max(t1, t2 T) T {
+	if t1.LessThan(t2) {
+		return t2
+	} else {
+		return t1
+	}
+}
+```
+
+We can't have these two definitions at the same time as overloading is not 
+allowed. 
+
+We can solve this with a static switch.
+
+```Go
+func [T] Max(t1, t2 T) T {
+	switch[T] {
+	case Ordered:
+		if t1 < t2 {
+			return t2
+		} else {
+			return t1
+		}
+	case Lessable: 
+		if t1.LessThan(t2) {
+			return t2
+		} else {
+			return t1
+		}
+	}
+}
+```
+
+The rules are: 
+
+* Each `case` is guarded by a constraint. Inside that `case` methods 
+  and operations allowed by the guarding constraint may be used.
+* On instantiation the compiler should apply the first switch case that matches
+  (ie. `T` satisfies the constraint). 
+  
+  Subsequent cases are skipped.
+* If no case matches, the compiler issues a error, something like: _`T` must 
+  fullfil one of constraints `Ordered`, `Lessable`._
+* A `default` entry is allowed, so that all types can be handled in one switch.    
+    
 
 ### Built in functions
 
@@ -413,28 +449,12 @@ Now I'll turn back to generics.
 Generic types can have methods:
 
 ```Go
-type [T C1] Foo ...
+type Foo(type T C1)  ...
 
-func [T C1] (f Foo[T]) M() {
+func (foo Foo(T)]  M() {
 
 }
 ```
-
-The target type must have the same number of type parameters as in the 
-definition of the type.
-And each of the type parameters must be declared to implement the same 
-constraint (if any) as in the definition of the type.
-
-Hence this 
-
-```Go
-type [T Constraint1] Foo ...
-
-func [T Constraint2] (f Foo[T]) M() {
-}
-```
-
-is allowed only if Constraint2 is _equal_ to Constraint1.
 
 ### Partial instantiation
 
@@ -442,11 +462,10 @@ A generic type may be used in another generic declaration if the compiler is
 able to verify that constraints are fulfilled. For example:
 
 ```Go
-type[T Constraint1] Foo ...
+type Foo(type T Constraint1) ...
 
-func[U Constraint2] f(Foo[U] foo) ...
+func f(type U Constraint2)(Foo(U) foo) ...
 ```
-
 Here `Constraint2` must imply `Constraint1` for the declaration to be valid. 
 
 ### Overloading generic definitions
@@ -455,138 +474,25 @@ Overloading of generic definitions with the _same_ number of type parameters is
 _not_ allowed: 
 
 ```Go
-type [T Constraint1] Foo ... 
+type  Foo(type T Constraint1) ... 
                           
-type [T Constraint2] Foo ... // Not allowed
+type Foo(type T Constraint2)  ... // Not allowed
 ```
 
 The problem would be that if `Baa` implements both `Constraint1` and 
-`Constraint2`, then `Foo[Baa]` would be ambigous with respect to which 
+`Constraint2`, then `Foo(Baa)` would be ambigous with respect to which 
 definition to employ.
 
 Overloading with _different_ numbers of generic parameters _is_ allowed.
 So:
 
 ```Go
-type [S Constraint1] Foo ...
-type [T Constraint2, U Constraint3] Foo ...
+type Foo(type S Constraint1)  ...
+type Foo(type T Constraint2, U Constraint3) ...
 ```
 
 is ok.
 
-## Examples
-
-### Apples and Oranges
-
-Typesafe fruit-count comparison could be done like:
-
-```Go
-
-func [Counter PositiveInteger] Compare(c1, c2 Counter) int {
-	if c1 < c2 {         // We know Counter supports '<'
-		return -1
-	} else if c1 == c2 { // We know Counter is comparable
-		return 0
-	} else {
-		return 1
-	}
-}
-
-type Applecount uint32
-type OrangeCount uint32
-
-var apples1, apples2 Applecount = 3,4
-var oranges1, oranges2 OrangeCount = 7,6
-
-Compare[Applecount](apples1, apples2)    // Yields 1
-Compare[Orangecount](oranges1, oranges2) // Yields -1
-
-```
-
-With no way to compare apples and oranges.
-
-### Generic singleton factory
-
-```
-constraint Initializable {
-	Initialize()
-}
-
-func[T] TypeOf() Type {
-	var t T
-	return reflect.TypeOf(t);
-}
-
-var repository [Type]interface{}
-
-func[T Initializable] Factory() *T {
-	var typeOfT = TypeOf[T]()
-
-	if _, ok := repository[typeOfT]; !ok {
-		var t T
-		(&t).Initialize();
-		repository[typeOfT] = &t
-	}
-
-	return repository[typeOfT].(*T)
-}
-
-```
-which could be used as:
-
-```Go
-type MyStruct struct {
-	....
-}
-
-func (ms *MyStruct) Initialize() {
-	...
-}
-
-
-var myStruct = Singleton[MyStruct]();
-```
-
-The function `TypeOf` is executed at runtime invoking reflection. One might
-consider adding a built-in function TypeOf which could be executed at compile
-time (instatiation time, that is).
-
-
-### Joining sequences
-
-This is a commented adaption of an example from Taylors 
-[Type Parameters](https://github.com/golang/proposal/blob/master/design/15292/2013-12-type-params.md) 
-
-```Go
-constraint ByteSequence {
-	:[]byte, string
-}
-
-func [T] zeroval() T {
-	var t T
-	return t
-}
-
-func [T ByteSequence] Join(a []T, sep T) T {
-	if len(a) == 0 { 
-		return zeroval[T]()
-	}
-	if len(a) == 1 {
-		return a[0] 
-	}
-	n := len(sep) * (len(a) - 1) // len is applicable to both []byte and string
-	for _, v := range a {
-		n += len(v)
-	}
-	b := make(byte[], n)
-	bp := copy(b, a[0])  // copy can copy from both []byte and string to []byte 
-	for _, v := range a[1:] {
-		bp += copy(b[bp:], sep)
-		bp += copy(b[bp:], v)
-	}
-	return T(b)
-}
-```
 
 ## Comparison to Taylors proposal
 
@@ -629,11 +535,9 @@ We can constrain a type parameter to have a function type as it's
 underlying type:
 
 ```Go
-constraint CallableWithIntAndFloat {
-	:func(i int, f float) 
-}
+constraint CallableWithIntAndFloat :func(i int, f float) 
 
-func [F CanCallWithIntAndFloat] Caller(f F) {
+func Caller[type F CallableWithIntAndFloat)(f F) {
 	f(3, 7.3)
 }
 ```
@@ -664,147 +568,6 @@ flexible.
 By postponing verification of correctnes to the point of instantiation, 
 the compiler can know the concrete types being substituted for parameters, and 
 allow/disallow these operations based on that knowledge.  
-
-## Static Switch
-
-Whats written above constitutes my proposal for constraints in Go. 
-
-Here I'll describe static switch, a form of _specialization_ which I have 
-considered, but decided not to add to this proposal.
-
-Consider the `Max` function:
-
-```Go
-func [T Ordered] Max(t1,t2 T) T {
-	if t1 < t2 {
-		return t2
-	} else {
-		return t1
-	}
-}
-```
-
-It would be nice to extend this function to types that are not ordered, but 
-have a method `LessThan`:
-
-```Go
-constraint [T] Lessable { 
-	LessThan(T) bool 
-}
-
-func [T Lessable] Max(t1, t2 T) T {
-	if t1.LessThan(t2) {
-		return t2
-	} else {
-		return t1
-	}
-}
-```
-
-We can't have these two definitions at the same time as overloading is not 
-allowed. 
-
-One could add _static switch_ to Go:
-
-```Go
-func [T] Max(t1, t2 T) T {
-	switch[T] {
-	case Ordered:
-		if t1 < t2 {
-			return t2
-		} else {
-			return t1
-		}
-	case Lessable: 
-		if t1.LessThan(t2) {
-			return t2
-		} else {
-			return t1
-		}
-	}
-}
-```
-
-The idea would be:
-* Each `case` is guarded by a constraint. Inside that `case` methods, 
-  fields and operations defined by the guarding constraint may be used.
-* On instantiation the compiler should apply the first switch case that matches
-  (ie. `T` satisfies the constraint).
-* If no case matches, the compiler issues a error, something like: _`T` must 
-  fullfil one of constraints `Ordered`, `Lessable`._
-* A `default` entry is allowed, so that all types can be handled in one switch.    
-    
-This demonstrates how constraints make it possible to introduce a typesafe form 
-of specialization into generics.
-It could be an addon to generics with constraints and as such, should be 
-considered separately.
-
-## Comparison with other languages
-
-Here I'll make a brief comparison with Java and C++. 
-I can't offer thoughts on any other language as Java and C++ are the only 
-statically typed languages with generics that I have any substantial 
-experience with. 
-
-### Java
-
-In java generic type parameters are constrained with the keyword `extends` 
-like:
-
-```Java
-class MyClass<L extends Loggable> {
-	private L l;
-}
-```
-
-`Loggable` may be a class or an interface, and any concrete type substituted 
-for `L` must extend/implement `Loggable`. 
-
-Thus any method defined on `Loggable` may here be applied to field `l`. 
-
-This works well in java where everything is a pointer to an object, and where 
-inheritance plays a central role.
-It has served as inspiration for this proposal, though what's described here 
-is quite different due to the differences of the two languages.
-
-### C++
-
-C++ has a template programming system that is very powerful. 
-It's implementation is based on the idea of template expansion and it is 
-heavily used in stdlib. 
-Those two factors combined means that using a template type may lead to many 
-levels of expansion which in turn, if the event of an error, can lead to quite
-horrific error messages. 
-
-The C++ community is attempting to fix this by introducing 'concepts', 
-currently slated for inclusion in C++20.  
-
-C++ concepts describe traits that a type parameter or a set of type parameters
-may be required to have, and they would be checked at the point of 
-instantiation, to allow the compiler to issue simpler warnings. 
-
-C++ concepts are both a a lot more powerful and a lot more complicated than the 
-constraint system I've described here.
-One factor that allows for some simplicity in this proposal is Go's type 
-system: 
-Consider the expression `a < b`.
-When you encounter that in a Go program, you know that
-
-* `a` and `b` have same type
-* The underlying type of `a` and `b` must be `string` or one of the 
-  non-complex number types.
-* The result of the expression is `bool`
-
-In C++ you'd know a lot less - `a` and `b` may have any type as may the result.
-
-To my eye, C++ concepts look mostly like a kind of 'compile-time unit testing' 
-\- small template programs the compiler runs prior to instantiating a template, 
-and on the failure of which, an error is issued.
-
-While C++ concepts limits what concrete types may be substituted for a type 
-parameter, they do _not_ limit what may be done with a type parameter in a 
-generic definition, so they do not provide 'generic type safety' like this 
-proposal does.
 
 ### Backward compability
 
