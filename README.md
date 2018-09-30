@@ -4,7 +4,7 @@ The Go team has published a [proposal]() for generics in Go.
 
 The proposal describes _contracts_ as a way of _constraining_ type parameters.
 Please read the proposal for details, but, briefly, a contract is a short 
-function body, using a type parameter, which is required to be valid. 
+function body, using a generic type parameter:
 
 Eg: 
 
@@ -13,41 +13,38 @@ contract Add(t T) {
 	t + t
 }
 ```
-This contract, `Add`, would be used to require that the addition operator 
-should apply to type `T`.
+This contract, `Add`, would be used to require that the operator `+` should 
+apply to type `T`.
 
 Here I'd like to present an alternative to contracts: _constraints_. 
 
-The idea is to offer 2 ways to constrain what types may be substituted for a 
-parameter in a generic definition.
+Constraints limits what types may be substituted for a parameter in a generic 
+definition, in two ways:
 
-1. Interfaces. Require types to implement interfaces. 
-1. Underlying types. Limit what underlying types a type may have.
-
+- Require types to implement **interfaces**. 
+- Limit what **underlying types** a type may have.
 
 ## Why underlying types
 
-The idea of using interfaces to constrain types has been put forward by several 
-people (including Ian Lance Taylor).
-The idea is very appealing in that it uses a construct already in Go, but 
-interfaces have the limitation that they cannot express applicabillity of 
-operators. 
+Several people have suggested using interfaces to constrain types.
+The idea is very appealing in that it uses a construct already in Go. 
+Interfaces, however, have the limitation that they cannot express 
+applicabillity of operators. 
 
 For that I believe underlying types are ideal. In Go, the question of whether 
 an operator may be applied to a type comes down to what underlying type it has. 
 In fact, the contract `Add` above implies that `T`'s underlying type must be
-one of `string, uint8, uint16, uint32, uint64, uint, int8, int16,
-int32, int64, int, float32, float64, complex64, complex128`. 
+either `string` or one of the numbertypes.
 
-In other words: `T` must have string or some number type as it's underlying.
 In my opinion the contract `Add` expresses that in an unnecessarily convoluted 
 way.
 
 Go's type system is very strict in that:
 
-* The use of operators is determined by underlying type
-* The operands of arithmetic binary operators must be of equal type, 
-  and the result will be of that type, too.
+* The use of operators is determined by underlying type.
+* The operands of arithmetic- or comparison binary operators must be of same 
+  type. For arithmetic operators the type of the result will be that of the 
+  operands.
 * Legality of casts between types is determined by underlying types.
 
 This strictness is a big asset of Go, and should be taken advantage of.
@@ -71,6 +68,8 @@ func (type T Loggable) DoLog(t T) {
 }
 ```
 
+Instantiating `DoLog` whith a type not implementing `Loggable` is an error.
+
 ## Underlying types
 
 The second way of constraining is _limiting what underlying types a type 
@@ -87,7 +86,7 @@ means the underlying type must be `uint8`, `uint16` or `uint32`.
 We can use this in a generic declaration:
 
 ```Go
-func(type T {uint8, uint16, uint32}) mul(t1, t2 T) T {
+func(type T {uint8, uint16, uint32}) Mul(t1, t2 T) T {
 	return t1*t2
 }
 ```
@@ -99,21 +98,15 @@ yield a result of type `T`.
 On the other hand, a declaration like this:
 
 ```Go
-func(type T {string, uint8}) mul(t1, t2 T) T {
+func(type T {string, uint8}) Mul(t1, t2 T) T {
 	return t1*t2
 }
 ```
 would give an error, as `string` is an allowed underlying type, and it does not
 support the multiplication operator.
 
-Inside a generic declaration, the validity of actions done to type parameters 
-(applying operators, calling methods, casting, assigning...) must follow from
-the constraints given.
-
-When instantiating a generic type or function, the compiler must issue an error
-if the types substituted for generic type parameters does not satisfy the given
-constraints.
-
+Instantiating `Mul` with a type of which the underlying type is not in the 
+allowed set, is an error.
 
 ## Combining constraints
 
@@ -147,7 +140,7 @@ A constraint may be given a name. For that we introduce a new keyword,
 `constraint`. An example:
 
 ```Go
-constraint MyConstraint Loggable & {uint8, uint16}
+constraint MyConstraint Loggable & {uint8, uint16, uint32}
 ```
 
 `MyConstraint` may now be used in generic declarations like:
@@ -254,11 +247,9 @@ If `C1` and `C2` are constraints, the following rules apply:
   underlying type sets.
 * `C1` and `C2`are equal if their method sets are equal and their underlying 
   type sets are equal.
-* `C1` _implies_ `C2` if :  
+* `C1` _implies_ `C2` if both of these conditions hold :  
   - `C1`'s method set is a _superset_ of `C2`'s method set  
-  _and_  
   - `C1`'s underlying type set is a _subset_ of `C2`'s underlying type set.
-set.
 * A constraint is _unsatisfiable_ (and an error) if it's set of underlying 
   types is empty.
 
@@ -309,7 +300,6 @@ Consider, in a context where `t` is of generic type `T` and x is some
 t = x
 t = (T)x
 ```
-The validity of these statements are determined by the underlying types of `T`.
 
 Let's say `T` is constrained to a finite set of underlying types. 
 Then assume, for each possible underlying type `u`, that `T` is defined as:
@@ -357,11 +347,11 @@ have a method `LessThan`:
 
 ```Go
 interface ComparesTo(type T) {
-	isLessThan(t T) bool 
+	LessThan(t T) bool 
 }
 
 func  Max(type T ComparesTo(T))(t1, t2 T) T {
-	if t1.isLessThan(t2) {
+	if t1.LessThan(t2) {
 		return t2
 	} else {
 		return t1
@@ -417,8 +407,9 @@ func F(type T1, T2)(t1 T1, t2 T2) Returntype switch {
 with `C1`, `C2`, `C3` and `C4` being constraints.
 
 One may find the (ab)use of `switch` obnoxius, but I think the idea of guarding 
-code blocks with constraints has merrits.  
-Unlike with overloading, which is heavily used in C++, there is no ambiguities 
+code blocks with constraints has merrits.
+
+Unlike overloading, which is heavily used in C++, there is no ambiguities 
 on what to apply, and the ability to specialize generic definitions is 
 important.
 
@@ -438,8 +429,8 @@ The constraint
 ```Go
 {[%]uint32}
 ``` 
-whould then allow any array of `uint32` as underlying type (Not to be confused
-with `{[]uint32}` which allows _slices_ of `uint32`). 
+whould then allow _any_ array of `uint32` as underlying type (Not to be 
+confused with `{[]uint32}` which allows _slices_ of `uint32`). 
 
 Arrays aren't used that much in Go programming (explicitly, that is) and I
 don't expect generics to change that. 
@@ -486,15 +477,14 @@ generic type parameters should be specified 'by code' or by a more 'direct'
 declaration.
 
 As you may guess I'm not a huge fan of specification by code. It feels to me 
-like a form of unit-testing at compile-time, and I fear that it will lead to 
+like a form of unit-testing at compile-time, and I believe that it will lead to 
 a high level of complexity, if not in implementation then at least
 in readability. 
 
 Another question is whether _this_ proposal is a good one, or whether some 
-other declarative approach would be better. 
-That is very probable, but I'm putting this forward hoping that it may add 
-value to the discussion on Go generics.
-
+other declarative approach would be better.  
+It is highly probable that better approaches exists, but I'm putting this 
+forward, hoping that it may add value to the discussion on Go generics.
 
 ## About
 
